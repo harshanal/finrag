@@ -44,7 +44,9 @@ class BM25Okapi:
         return scores
 
 
-def retrieve_evidence(turn: Dict[str, Any], question: str, top_k: int = 8, bm25_k: int = 20) -> List[str]:
+def retrieve_evidence(
+    turn: Dict[str, Any], question: str, top_k: int = 8, bm25_k: int = 20
+) -> List[str]:
     """Hybrid retrieval: BM25 + embedding fusion, returning top_k chunk_ids."""
     candidate_chunks = build_candidate_chunks(turn)
     texts = [c["text"] for c in candidate_chunks]

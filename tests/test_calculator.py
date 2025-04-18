@@ -1,7 +1,5 @@
 import pytest
 
-import pytest
-
 from finrag.calculator import (
     add,
     divide,

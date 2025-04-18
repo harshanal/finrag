@@ -1,7 +1,7 @@
 """DSL parser and serializer for FinRAG."""
 
 import re
-from typing import List, Union, Dict, Any
+from typing import Any, Dict, List, Union
 
 
 class ArgRef:
@@ -74,7 +74,8 @@ def serialize_program(ops: List[Operation]) -> str:
 def execute_program(program_str: str) -> Dict[str, Any]:
     """Parse and run a DSL program string, returning result, formatted, and intermediates."""
     # Import calculator functions here to avoid circular import
-    from .calculator import add, subtract, multiply, divide, format_percentage
+    from .calculator import add, divide, format_percentage, multiply, subtract
+
     ops = parse_program(program_str)
     # Map operation names to calculator functions
     op_funcs = {"add": add, "subtract": subtract, "multiply": multiply, "divide": divide}

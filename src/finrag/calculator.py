@@ -1,6 +1,7 @@
 """Calculator module for FinRAG."""
 
 from __future__ import annotations
+
 from typing import List, Union
 
 
@@ -26,11 +27,12 @@ def format_percentage(value: float, decimals: int = 1) -> str:
     return f"{value * 100:.{decimals}f}%"
 
 
-def execute_program(ops: List['Operation']) -> Union[int, float]:
+def execute_program(ops: List["Operation"]) -> Union[int, float]:
     """
     Execute a sequence of Operations and return the final numeric result.
     """
     from .dsl import ArgRef
+
     results: List[Union[int, float]] = []
     for op in ops:
         args = []
