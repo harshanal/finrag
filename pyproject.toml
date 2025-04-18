@@ -1,0 +1,44 @@
+[tool.poetry]
+name = "finrag"
+version = "0.1.0"
+description = "FinRAG: Conversational QA Agent for financial reports"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [
+    { include = "finrag", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+openai = "^0.27.0"
+cohere = "^4.0.0"
+pinecone-client = "^2.2.1"
+python-dotenv = "^1.0.0"
+jsonlines = "^3.1.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0"
+pytest-cov = "^4.0"
+black = "^23.9.1"
+isort = "^5.12.0"
+flake8 = "^6.0"
+flake8-bugbear = "^23.6.30"
+mypy = "^1.4.1"
+pre-commit = "^3.4.0"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.11"
+plugins = []
+strict = false
+disallow_untyped_defs = true
+exclude = ["tests", "data"]
+
+[tool.poetry.scripts]
+finrag-eval = "finrag.cli:main"
