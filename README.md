@@ -12,11 +12,22 @@ poetry install
 poetry shell
 ```
 
-Copy environment variables:
+## Environment Variables
 
-```bash
-cp .env .env
-```
+This project requires API keys from OpenAI, Pinecone, and Cohere.
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Fill in the API keys in the `.env` file.
+
+    ```bash
+    OPENAI_API_KEY=your-openai-key
+    PINECONE_API_KEY=your-pinecone-key
+    COHERE_API_KEY=your-cohere-key
+    ```
 
 ## Dataset
 This project uses data from the ConvFinQA dataset, which provides conversational question-answer pairs over financial documents.
