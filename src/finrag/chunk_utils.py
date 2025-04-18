@@ -1,6 +1,6 @@
 """Utility to convert a conversation turn into candidate chunks for retrieval."""
 
-from typing import List, Dict
+from typing import Dict, List
 
 
 def build_candidate_chunks(turn: Dict) -> List[Dict]:
