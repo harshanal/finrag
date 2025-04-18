@@ -1,7 +1,7 @@
 """Retrieval module for FinRAG."""
 
 import math
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from finrag.chunk_utils import build_candidate_chunks
 from finrag.embeddings import EmbeddingStore
@@ -10,7 +10,7 @@ from finrag.tools import co
 
 # Pure-Python BM25 implementation; no external dependencies
 class BM25Okapi:
-    def __init__(self, corpus, k1=1.5, b=0.75):
+    def __init__(self, corpus: List[List[str]], k1: float = 1.5, b: float = 0.75) -> None:
         self.corpus = corpus
         self.k1 = k1
         self.b = b
@@ -44,7 +44,7 @@ class BM25Okapi:
         return scores
 
 
-def retrieve_evidence(turn: Dict, question: str, top_k: int = 8, bm25_k: int = 20) -> List[str]:
+def retrieve_evidence(turn: Dict[str, Any], question: str, top_k: int = 8, bm25_k: int = 20) -> List[str]:
     """Hybrid retrieval: BM25 + embedding fusion, returning top_k chunk_ids."""
     candidate_chunks = build_candidate_chunks(turn)
     texts = [c["text"] for c in candidate_chunks]
@@ -57,7 +57,7 @@ def retrieve_evidence(turn: Dict, question: str, top_k: int = 8, bm25_k: int = 2
     chunk_embeds = store.get_embeddings(texts)
 
     # cosine similarity via pure Python
-    def cosine(a, b):
+    def cosine(a: List[float], b: List[float]) -> float:
         dot = sum(x * y for x, y in zip(a, b))
         norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
         return dot / norm if norm else 0.0
