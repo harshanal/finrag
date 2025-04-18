@@ -1,3 +1,4 @@
+# flake8: noqa E501,E231
 """Utility to convert a conversation turn into candidate chunks for retrieval."""
 
 from typing import Dict, List

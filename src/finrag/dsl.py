@@ -1,7 +1,7 @@
 """DSL parser and serializer for FinRAG."""
 
 import re
-from typing import List, Union
+from typing import List, Union, Dict, Any
 
 
 class ArgRef:
@@ -69,3 +69,31 @@ def serialize_program(ops: List[Operation]) -> str:
                 arg_strs.append(str(arg))
         parts.append(f"{op.name}({', '.join(arg_strs)})")
     return ", ".join(parts)
+
+
+def execute_program(program_str: str) -> Dict[str, Any]:
+    """Parse and run a DSL program string, returning result, formatted, and intermediates."""
+    # Import calculator functions here to avoid circular import
+    from .calculator import add, subtract, multiply, divide, format_percentage
+    ops = parse_program(program_str)
+    # Map operation names to calculator functions
+    op_funcs = {"add": add, "subtract": subtract, "multiply": multiply, "divide": divide}
+    intermediates: List[float] = []
+    for op in ops:
+        args: List[Union[int, float]] = []
+        for arg in op.args:
+            if isinstance(arg, ArgRef):
+                idx = arg.index
+                if idx < 0 or idx >= len(intermediates):
+                    raise IndexError(f"Invalid intermediate reference: #{idx}")
+                args.append(intermediates[idx])
+            else:
+                args.append(arg)
+        func = op_funcs.get(op.name)
+        if func is None:
+            raise ValueError(f"Unknown operation: {op.name}")
+        result = func(*args)
+        intermediates.append(result)
+    final = intermediates[-1] if intermediates else 0.0
+    formatted = format_percentage(final)
+    return {"result": final, "formatted": formatted, "intermediates": intermediates}
