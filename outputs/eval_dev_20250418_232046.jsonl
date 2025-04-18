@@ -1,3 +1,0 @@
-{"id": "Single_BDX/2018/page_82.pdf-1_4", "error": "invalid literal for int() with base 10: 'numbers: [cost_2016'"}
-{"id": "Single_DVN/2007/page_58.pdf-3_1", "question": "what percentage of the total oil and gas mmboe comes from canada?", "gold_answer": "24.69%", "agent_answer": "0.0%", "gold_program": "divide(60, 243), multiply(#0, const_100)", "program": "percentage", "tool": "run_math_tool", "evidence": ["null"]}
-{"id": "Single_UNP/2006/page_37.pdf-4_1", "error": "invalid literal for int() with base 10: 'cash_capital_investments_track_2005'"}

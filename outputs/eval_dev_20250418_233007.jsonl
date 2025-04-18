@@ -1,3 +1,0 @@
-{"id": "Single_HOLX/2015/page_98.pdf-2_2", "error": "invalid literal for int() with base 10: 'amortization_expense_2016'"}
-{"id": "Single_RSG/2015/page_126.pdf-1_0", "error": "invalid literal for int() with base 10: 'gross_unrecognized_tax_benefits_2014'"}
-{"id": "Single_AES/2017/page_175.pdf-1_3", "question": "what percent of the receivable balances in puerto rico as of december 31 , 2017 was current?", "gold_answer": "38%", "agent_answer": "", "gold_program": "subtract(86, 53), divide(#0, 86)", "program": "", "tool": "none", "evidence": ["null"]}
