@@ -1,0 +1,4 @@
+{"id": "Single_ETR/2013/page_118.pdf-4_1", "question": "what are the lease obligations to entergy louisiana as a percentage of long-term debt maturities in 2014?", "gold_answer": "38.7%", "agent_answer": "", "gold_program": "divide(385373, const_1000), divide(149, #0)", "program": "", "tool": "none", "evidence": ["null"]}
+{"id": "Single_UNP/2015/page_35.pdf-2_4", "error": "Unknown operation: percentage_change"}
+{"id": "Single_LKQ/2010/page_84.pdf-2_0", "error": "Unknown operation: percentage_change"}
+{"id": "Single_NWS/2016/page_61.pdf-1_1", "error": "invalid literal for int() with base 10: 'divide(100'"}

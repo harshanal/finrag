@@ -96,5 +96,9 @@ def execute_program(program_str: str) -> Dict[str, Any]:
         result = func(*args)
         intermediates.append(result)
     final = intermediates[-1] if intermediates else 0.0
-    formatted = format_percentage(final)
+    # Conditional formatting: percentage for subtract then divide, else raw
+    if len(ops) == 2 and ops[0].name == "subtract" and ops[1].name == "divide":
+        formatted = format_percentage(final)
+    else:
+        formatted = f"{final:g}" if isinstance(final, float) else str(final)
     return {"result": final, "formatted": formatted, "intermediates": intermediates}

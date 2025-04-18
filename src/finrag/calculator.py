@@ -24,7 +24,11 @@ def divide(a: Union[int, float], b: Union[int, float]) -> float:
 
 
 def format_percentage(value: float, decimals: int = 1) -> str:
-    return f"{value * 100:.{decimals}f}%"
+    pct = value * 100
+    # If percentage is a whole number, format without decimals
+    if isinstance(pct, float) and pct.is_integer():
+        return f"{int(pct)}%"
+    return f"{pct:.{decimals}f}%"
 
 
 def execute_program(ops: List["Operation"]) -> Union[int, float]:

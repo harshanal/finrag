@@ -27,3 +27,7 @@ src/finrag.egg-info/
 .ipynb_checkpoints/
 
 # outputs
+outputs/
+
+# manual test files
+manual_test.py
