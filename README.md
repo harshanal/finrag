@@ -15,8 +15,16 @@ poetry shell
 Copy environment variables:
 
 ```bash
-cp .env.example .env
+cp .env .env
 ```
+
+## Dataset
+This project uses data from the ConvFinQA dataset, which provides conversational question-answer pairs over financial documents.
+
+Download it from: [https://github.com/yangji9181/ConvFinQA](https://github.com/yangji9181/ConvFinQA)
+
+
+
 
 ## Running Tests
 
