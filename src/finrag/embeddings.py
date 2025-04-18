@@ -1,11 +1,14 @@
 """Embedding utilities for FinRAG."""
 import os
-from typing import List, Dict
+from typing import Dict, List
+
 import jsonlines
 import openai
 
+
 class EmbeddingStore:
     """Cache and retrieve text embeddings using OpenAI."""
+
     def __init__(self, model: str = "text-embedding-ada-002"):
         self.model = model
         self.cache_path = os.path.join(os.getcwd(), "data", "embeddings.jsonl")
