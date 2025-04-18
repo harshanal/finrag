@@ -6,6 +6,7 @@ from typing import List, Union
 
 class ArgRef:
     """Reference to a previous operation result by index."""
+
     def __init__(self, index: int) -> None:
         self.index = index
 
@@ -18,16 +19,13 @@ class ArgRef:
 
 class Operation:
     """A single operation in a DSL program."""
+
     def __init__(self, name: str, args: List[Union[int, float, ArgRef]]) -> None:
         self.name = name
         self.args = args
 
     def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, Operation)
-            and self.name == other.name
-            and self.args == other.args
-        )
+        return isinstance(other, Operation) and self.name == other.name and self.args == other.args
 
     def __repr__(self) -> str:
         return f"Operation({self.name!r}, {self.args})"
@@ -38,18 +36,18 @@ def parse_program(program_str: str) -> List[Operation]:
     Parse a DSL program string into a list of Operation objects.
 
     Example:
-        """subtract(206588, 181001), divide(#0, 181001)"""
+        subtract(206588, 181001), divide(#0, 181001)
     """
     ops: List[Operation] = []
     pattern = re.compile(r"(\w+)\s*\(([^)]*)\)")
     for name, args_str in pattern.findall(program_str):
         args: List[Union[int, float, ArgRef]] = []
-        for arg in [a.strip() for a in args_str.split(',') if a.strip()]:
-            if arg.startswith('#'):
+        for arg in [a.strip() for a in args_str.split(",") if a.strip()]:
+            if arg.startswith("#"):
                 idx = int(arg[1:])
                 args.append(ArgRef(idx))
             else:
-                if '.' in arg:
+                if "." in arg:
                     args.append(float(arg))
                 else:
                     args.append(int(arg))
@@ -70,4 +68,4 @@ def serialize_program(ops: List[Operation]) -> str:
             else:
                 arg_strs.append(str(arg))
         parts.append(f"{op.name}({', '.join(arg_strs)})")
-    return ', '.join(parts)
+    return ", ".join(parts)

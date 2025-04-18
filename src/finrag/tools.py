@@ -1,9 +1,10 @@
 """LLM and external tool wrappers for FinRAG."""
 
 import os
-from typing import Dict, Any
-import openai
+from typing import Any, Dict
+
 import cohere
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()

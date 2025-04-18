@@ -38,6 +38,7 @@ python_version = "3.11"
 plugins = []
 strict = false
 disallow_untyped_defs = true
+ignore_missing_imports = true
 exclude = ["tests", "data"]
 
 [tool.poetry.scripts]

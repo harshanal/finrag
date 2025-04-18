@@ -1,6 +1,6 @@
 """Agent module for FinRAG."""
 
-from typing import List, Dict
+from typing import Dict, List
 
 
 def answer(question: str, conversation_history: List[Dict], doc_id: str) -> Dict:

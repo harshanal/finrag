@@ -1,6 +1,15 @@
 import pytest
-from finrag.calculator import add, subtract, multiply, divide, format_percentage, execute_program
-from finrag.dsl import Operation, ArgRef
+
+from finrag.calculator import (
+    add,
+    divide,
+    execute_program,
+    format_percentage,
+    multiply,
+    subtract,
+)
+from finrag.dsl import ArgRef, Operation
+
 
 def test_add_subtract_multiply_divide():
     assert add(2, 3) == 5
@@ -10,9 +19,11 @@ def test_add_subtract_multiply_divide():
     with pytest.raises(ValueError):
         divide(1, 0)
 
+
 def test_format_percentage():
     assert format_percentage(0.141, decimals=1) == "14.1%"
     assert format_percentage(0.5, decimals=0) == "50%"
+
 
 def test_execute_program_simple():
     ops = [

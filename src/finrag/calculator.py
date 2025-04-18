@@ -1,7 +1,8 @@
 """Calculator module for FinRAG."""
 
-from typing import Union, List
-from .dsl import Operation, ArgRef
+from typing import List, Union
+
+from .dsl import ArgRef, Operation
 
 
 def add(a: Union[int, float], b: Union[int, float]) -> Union[int, float]:

@@ -6,7 +6,7 @@ FinRAG is a Conversational QA Agent prototype for multi‑step quantitative ques
 
 ```bash
 pipx install poetry
-git clone <repo> finrag
+git clone https://github.com/harshanal/finrag.git finrag
 cd finrag
 poetry install
 poetry shell
