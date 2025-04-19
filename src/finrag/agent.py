@@ -4,7 +4,7 @@ import json
 import openai
 import warnings
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple, Optional
 from finrag.tools import MathToolInput, run_math_tool
 import logging
 
@@ -35,7 +35,11 @@ def answer(question: str, conversation_history: List[Dict], doc_id: str) -> Dict
     """Answer a question given history and document ID."""
     raise NotImplementedError
 
-def generate_tool_call(question: str, evidence_chunks: List[Dict[str, str]]) -> Dict[str, str]:
+def generate_tool_call(
+    question: str,
+    evidence_chunks: List[Dict[str, str]],
+    chat_history: Optional[List[Tuple[str, str]]] = None,
+) -> Dict[str, str]:
     """Use LLM function calling to generate a math tool call from question and evidence."""
     # format evidence for prompt
     evidence_text = "\n".join(
@@ -75,8 +79,13 @@ Constraints:
     demo2_assist = {"role": "assistant", "function_call": {"name": FUNCTION_NAME, "arguments": json.dumps({"program": "subtract(25, 20), multiply(#0, 100)"})}}
     # real user query
     real_user = {"role": "user", "content": f"Question: {question}\nRelevant evidence:\n{evidence_text}\nEmit ONLY a function call."}
-    messages = [
-        {"role": "system", "content": system_prompt},
+    # Build chat messages: system, history (if any), few-shot demos, then current query
+    messages = [{"role": "system", "content": system_prompt}]
+    if chat_history:
+        for idx, (q, a) in enumerate(chat_history):
+            messages.append({"role": "user", "content": f"Q{idx+1}: {q}"})
+            messages.append({"role": "assistant", "content": f"A{idx+1}: {a}"})
+    messages += [
         {"role": "user", "content": demo1_user},
         demo1_assist,
         {"role": "user", "content": demo2_user},
@@ -175,9 +184,13 @@ Constraints:
             return {"tool": "none", "program": ""}
     return {"tool": func_call.get("name", "none"), "program": program}
 
-def plan_and_execute(question: str, evidence_chunks: List[Dict[str, str]]) -> Dict[str, Any]:
+def plan_and_execute(
+    question: str,
+    evidence_chunks: List[Dict[str, str]],
+    chat_history: Optional[List[Tuple[str, str]]] = None,
+) -> Dict[str, Any]:
     """Plan with the LLM to generate a tool call and execute it."""
-    tool_call = generate_tool_call(question, evidence_chunks)
+    tool_call = generate_tool_call(question, evidence_chunks, chat_history)
     tool = tool_call.get("tool", "none")
     program = tool_call.get("program", "")
     # If no valid tool or empty program, return no-op

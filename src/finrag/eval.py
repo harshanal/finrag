@@ -5,7 +5,8 @@ import os
 import random
 import warnings
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
+from collections import defaultdict
 
 import finrag.logging_conf  # configure global logging
 import logging
@@ -16,7 +17,13 @@ from finrag.retriever import retrieve_evidence
 
 
 def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, strict: bool = False) -> Dict[str, Any]:
-    total = len(data)
+    # Group samples into conversations by stripping turn suffix
+    conv_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for sample in data:
+        sid = sample.get("id", "")
+        conv_id = sid.rsplit("_", 1)[0]
+        conv_groups[conv_id].append(sample)
+    total = sum(len(v) for v in conv_groups.values())
     processed = 0
     exec_correct = 0
     prog_match = 0
@@ -24,85 +31,93 @@ def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, stri
     failures: List[Any] = []
     examples: List[Dict[str, Any]] = []
 
-    for sample in data:
-        sample_id = sample.get("id")
-        qa = sample.get("qa", {})
-        question = qa.get("question")
-        gold_answer = qa.get("answer")
-        gold_program = qa.get("program")
-        # Skip samples with missing QA fields
-        if question is None or gold_answer is None or gold_program is None:
-            msg = f"Skipping sample {sample_id}: missing question/answer/program"
-            if strict:
-                raise ValueError(msg)
-            warnings.warn(msg)
-            continue
-        processed += 1
-        # DEBUG: show sample keys
-        print(f"DEBUG_SAMPLE[{sample_id}]: keys={list(sample.keys())}")
-        # DEBUG: show QA keys and values
-        print(f"DEBUG_SAMPLE[{sample_id}]: QA={sample.get('qa')}")
-        # build candidate chunks and debug
-        all_chunks = build_candidate_chunks(sample)
-        logging.debug(f"Sample {sample_id} gold_inds: {sample.get('gold_inds')}")
-        logging.debug(f"Candidate chunk_ids: {[c['chunk_id'] for c in all_chunks]}")
-        print(f"DEBUG_SAMPLE[{sample_id}]: candidate chunk_ids={[c['chunk_id'] for c in all_chunks]}")
-        if use_retrieval:
-            ids = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
-            # select by chunk_id
-            evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
-        else:
-            # gold_inds are indices into candidate_chunks
-            gold_inds = sample.get("gold_inds", []) or []
-            print(f"DEBUG_SAMPLE[{sample_id}]: gold_inds={gold_inds}")
-            if gold_inds:
-                evidence_chunks = []
-                for idx in gold_inds:
-                    try:
-                        evidence_chunks.append(all_chunks[int(idx)])
-                    except Exception as e:
-                        print(f"DEBUG_SAMPLE[{sample_id}]: invalid gold index {idx}, error={e}")
-            else: # If no gold_inds, use all candidate chunks
-                evidence_chunks = all_chunks
-         # Handle missing evidence
-        if not evidence_chunks:
-            warnings.warn(f"No evidence chunks available for sample {sample_id} after initial selection.")
-            # Fallback to retrieval pipeline if not already using retrieval
-            if not use_retrieval:
-                ids = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
-                evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
-                logging.debug(f"Sample {sample_id} retrieval fallback chunk_ids: {[c['chunk_id'] for c in evidence_chunks]}")
-            # If still no evidence, skip this sample
-            if not evidence_chunks:
-                warnings.warn(f"No evidence chunks available after retrieval for sample {sample_id}. Skipping sample.")
+    # Iterate through each conversation
+    for conv_id, samples in conv_groups.items():
+        # Sort turns by turn index from id suffix
+        turns = sorted(samples, key=lambda s: int(s.get("id", "").rsplit("_",1)[1]))
+        chat_history: List[Tuple[str, str]] = []
+        for sample in turns:
+            sample_id = sample.get("id")
+            qa = sample.get("qa", {})
+            question = qa.get("question")
+            gold_answer = qa.get("answer")
+            gold_program = qa.get("program")
+            # Skip samples with missing QA fields
+            if question is None or gold_answer is None or gold_program is None:
+                msg = f"Skipping sample {sample_id}: missing question/answer/program"
+                if strict:
+                    raise ValueError(msg)
+                warnings.warn(msg)
                 continue
-        try:
-            result = plan_and_execute(question, evidence_chunks)
-            tool = result.get("tool")
-            # count only valid tool calls
-            if tool == FUNCTION_NAME:
-                tool_used += 1
-            answer = result.get("answer")
-            program = result.get("program")
-            if answer == gold_answer:
-                exec_correct += 1
+            processed += 1
+            # DEBUG: show sample keys
+            print(f"DEBUG_SAMPLE[{sample_id}]: keys={list(sample.keys())}")
+            # DEBUG: show QA keys and values
+            print(f"DEBUG_SAMPLE[{sample_id}]: QA={sample.get('qa')}")
+            # build candidate chunks and debug
+            all_chunks = build_candidate_chunks(sample)
+            logging.debug(f"Sample {sample_id} gold_inds: {sample.get('gold_inds')}")
+            logging.debug(f"Candidate chunk_ids: {[c['chunk_id'] for c in all_chunks]}")
+            print(f"DEBUG_SAMPLE[{sample_id}]: candidate chunk_ids={[c['chunk_id'] for c in all_chunks]}")
+            if use_retrieval:
+                ids = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
+                # select by chunk_id
+                evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
             else:
+                # gold_inds are indices into candidate_chunks
+                gold_inds = sample.get("gold_inds", []) or []
+                print(f"DEBUG_SAMPLE[{sample_id}]: gold_inds={gold_inds}")
+                if gold_inds:
+                    evidence_chunks = []
+                    for idx in gold_inds:
+                        try:
+                            evidence_chunks.append(all_chunks[int(idx)])
+                        except Exception as e:
+                            print(f"DEBUG_SAMPLE[{sample_id}]: invalid gold index {idx}, error={e}")
+                else: # If no gold_inds, use all candidate chunks
+                    evidence_chunks = all_chunks
+            # Handle missing evidence
+            if not evidence_chunks:
+                warnings.warn(f"No evidence chunks available for sample {sample_id} after initial selection.")
+                # Fallback to retrieval pipeline if not already using retrieval
+                if not use_retrieval:
+                    ids = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
+                    evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
+                    logging.debug(f"Sample {sample_id} retrieval fallback chunk_ids: {[c['chunk_id'] for c in evidence_chunks]}")
+                # If still no evidence, skip this sample
+                if not evidence_chunks:
+                    warnings.warn(f"No evidence chunks available after retrieval for sample {sample_id}. Skipping sample.")
+                    continue
+            try:
+                # Pass chat_history into planner for multi-turn context
+                result = plan_and_execute(question, evidence_chunks, chat_history)
+                tool = result.get("tool")
+                # count only valid tool calls
+                if tool == FUNCTION_NAME:
+                    tool_used += 1
+                answer = result.get("answer")
+                program = result.get("program")
+                if answer == gold_answer:
+                    exec_correct += 1
+                else:
+                    failures.append(sample_id)
+                if program == gold_program:
+                    prog_match += 1
+                examples.append({
+                    "id": sample_id,
+                    "question": question,
+                    "gold_answer": gold_answer,
+                    "agent_answer": answer,
+                    "gold_program": gold_program,
+                    "program": program,
+                    "tool": tool,
+                    "evidence": [c["chunk_id"] for c in evidence_chunks],
+                })
+                # Update history for next turn
+                chat_history.append((question, answer))
+            except Exception as e:
                 failures.append(sample_id)
-            if program == gold_program:
-                prog_match += 1
-            examples.append({
-                "id": sample_id,
-                "question": question,
-                "gold_answer": gold_answer,
-                "agent_answer": answer,
-                "gold_program": gold_program,
-                "program": program,
-                "tool": tool,
-                "evidence": [c["chunk_id"] for c in evidence_chunks],
-            })
-        except Exception as e:
-            failures.append(sample_id)
-            examples.append({"id": sample_id, "error": str(e)})
+                examples.append({"id": sample_id, "error": str(e)})
 
     return {
         "total": processed,

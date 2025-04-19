@@ -96,9 +96,12 @@ def execute_program(program_str: str) -> Dict[str, Any]:
         result = func(*args)
         intermediates.append(result)
     final = intermediates[-1] if intermediates else 0.0
-    # Conditional formatting: percentage for subtract then divide, else raw
-    if len(ops) == 2 and ops[0].name == "subtract" and ops[1].name == "divide":
-        formatted = format_percentage(final)
+    # Percentage change detection: any subtract then divide sequence => percent
+    if len(ops) >= 2 and ops[0].name == "subtract" and ops[1].name == "divide":
+        # Use the division result (second intermediate) for percent formatting
+        ratio = intermediates[1]
+        # Round to whole percent to align with gold answers
+        formatted = format_percentage(ratio, decimals=0)
     else:
         formatted = f"{final:g}" if isinstance(final, float) else str(final)
     return {"result": final, "formatted": formatted, "intermediates": intermediates}
