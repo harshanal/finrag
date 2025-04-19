@@ -33,13 +33,11 @@ class MathToolInput(BaseModel):
 
 def run_math_tool(input: MathToolInput) -> Dict[str, Any]:
     from finrag.dsl import execute_program
-    from finrag.calculator import format_percentage
 
     out = execute_program(input.program)
-    # Format the final result as a percentage string
-    answer = format_percentage(out["result"])
+    # Use DSL executor's formatted output (raw or percentage)
     return {
-        "answer": answer,
+        "answer": out["formatted"],
         "intermediates": out["intermediates"],
         "program": input.program,
     }
