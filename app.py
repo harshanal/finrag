@@ -1,5 +1,4 @@
 import os
-import os
 import sys
 import math
 
@@ -40,25 +39,29 @@ st.title("FinRAG Interactive Demo")
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-st.sidebar.header("Options")
-split = st.sidebar.selectbox("Split", ["dev"])
-use_retrieval = st.sidebar.checkbox("Use Retrieval", value=False)
-data = load_data(split)
+# Sidebar options and sample questions
+data = load_data()
 
-sample_ids = [s.get("id") for s in data]
-selected = st.sidebar.selectbox("Select Example", ["None"] + sample_ids)
-if selected and selected != "None":
-    sample = next((s for s in data if s.get("id") == selected), {})
-    qa = sample.get("qa", {})
-    question = qa.get("question") or sample.get("question", "")
-    gold_answer = qa.get("answer") or sample.get("answer", "[No gold answer available]")
-    gold_program = qa.get("program") or sample.get("program")
-else:
-    sample = None
-    question = st.text_area("Enter your financial question:")
-    gold_answer = None
-    gold_program = None
+# Initialize session state for selected sample and question
+if "selected_sample_id" not in st.session_state and data:
+    st.session_state["selected_sample_id"] = data[0].get("id")
+if "question_input" not in st.session_state and data:
+    st.session_state["question_input"] = data[0].get("qa", {}).get("question", "")
 
+# Sample Questions Sidebar
+raw_qas = [(s.get("id"), s.get("qa", {}).get("question")) for s in data if s.get("qa", {}).get("question")]
+seen = set(); unique_qas = []
+for sid, q in raw_qas:
+    if q not in seen:
+        seen.add(q); unique_qas.append((sid, q))
+unique_qas = unique_qas[:20]
+st.sidebar.markdown("### Sample Questions")
+for i, (sid, q) in enumerate(unique_qas):
+    col1, col2 = st.sidebar.columns([5,1])
+    col1.markdown(f"- {q}")
+    if col2.button("📋", key=f"copy_q_{i}"):
+        st.session_state["selected_sample_id"] = sid
+        st.session_state["question_input"] = q
 if st.sidebar.button("Clear Conversation"):
     st.session_state.chat_history = []
 
@@ -69,55 +72,59 @@ if st.session_state.chat_history:
         st.markdown(f"**Q{idx}:** {q}")
         st.markdown(f"**A{idx}:** {a}")
 
-# Run current turn
+# Main Input Panel
+st.subheader("Your Question")
+question = st.text_area(
+    "Enter your financial question:",
+    value=st.session_state["question_input"],
+    key="question_input",
+    height=100,
+)
+
 if st.button("Run"):
     if not question:
-        st.error("Please enter a question or select an example.")
+        st.error("Please enter a question.")
     else:
-        if sample:
-            all_chunks = build_candidate_chunks(sample)
-            if use_retrieval:
-                ids = retrieve_evidence(sample, question)
-                evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
-            else:
-                gold_inds = sample.get("gold_inds", []) or []
-                if gold_inds:
-                    evidence_chunks = [all_chunks[i] for i in gold_inds if i < len(all_chunks)]
-                else:
-                    evidence_chunks = all_chunks
+        # Retrieve and rerank
+        sample = next((s for s in data if s.get("id") == st.session_state["selected_sample_id"]), None)
+        if not sample:
+            st.error("No sample selected for retrieval.")
         else:
-            st.error("Please select an example to use evidence retrieval.")
-            evidence_chunks = []
+            ret = retrieve_evidence(sample, question)
+            raw_chunks = ret.get("raw_chunks", [])
+            reranked_chunks = ret.get("reranked_chunks", [])
 
-        st.subheader("Question")
-        st.write(question)
+            with st.expander("🔎 Top-K Retrieved Chunks (Before Rerank)"):
+                for i, ch in enumerate(raw_chunks):
+                    st.markdown(f"**{i+1}.** `{ch['chunk_id']}` — {ch['text'][:300]}...")
+            with st.expander("📊 Top-K Chunks After Rerank (Used by LLM)"):
+                for i, ch in enumerate(reranked_chunks):
+                    st.markdown(
+                        f"**{i+1}.** `{ch['chunk_id']}` — {ch['text'][:300]}...  score: {ch['score']:.2f}"
+                    )
 
-        with st.expander("Evidence"):
-            for c in evidence_chunks:
-                st.write(f"ID: {c['chunk_id']}")
-                st.write(c["text"])
+            with st.spinner("Planning and executing..."):
+                result = plan_and_execute(question, reranked_chunks)
+                # Optionally track history without passing into LLM
+                st.session_state.chat_history.append((question, result["answer"]))
 
-        with st.spinner("Planning and executing..."):
-            result = plan_and_execute(question, evidence_chunks, st.session_state.chat_history)
-            # Append this turn to history
-            st.session_state.chat_history.append((question, result["answer"]))
-
-        st.subheader("Generated Program")
-        st.code(result["program"])
-
-        st.subheader("Intermediate Values")
-        st.write(result["intermediates"])
-
-        st.subheader("Final Answer")
-        st.write(result["answer"])
-
-        st.subheader("Gold Answer")
-        st.write(gold_answer if gold_answer is not None else "[No gold answer available]")
-        if gold_answer is not None:
-            if answers_match(result["answer"], gold_answer):
-                st.success("✅ Correct!")
-            else:
-                st.error("❌ Incorrect.")
-        if gold_program:
-            st.subheader("DSL Program (Gold)")
-            st.code(gold_program)
+            # Results
+            st.subheader("Generated Program")
+            st.code(result["program"])
+            st.subheader("Intermediate Values")
+            st.write(result["intermediates"])
+            st.subheader("Final Answer")
+            st.write(result["answer"])
+            # Gold answer and comparison from selected sample
+            gold_answer = sample.get("qa", {}).get("answer") or sample.get("answer")
+            if gold_answer is not None:
+                st.subheader("Gold Answer")
+                st.write(gold_answer)
+                if answers_match(result["answer"], gold_answer):
+                    st.success("✅ Correct!")
+                else:
+                    st.error("❌ Incorrect.")
+            gold_program = sample.get("qa", {}).get("program") or sample.get("program")
+            if gold_program:
+                st.subheader("DSL Program (Gold)")
+                st.code(gold_program)

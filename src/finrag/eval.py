@@ -60,9 +60,10 @@ def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, stri
             logging.debug(f"Candidate chunk_ids: {[c['chunk_id'] for c in all_chunks]}")
             print(f"DEBUG_SAMPLE[{sample_id}]: candidate chunk_ids={[c['chunk_id'] for c in all_chunks]}")
             if use_retrieval:
-                ids = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
-                # select by chunk_id
-                evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
+                # New retrieve_evidence returns dict with raw and reranked chunks
+                ret = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
+                # Use reranked_chunks as evidence
+                evidence_chunks = ret.get("reranked_chunks", [])
             else:
                 # gold_inds are indices into candidate_chunks
                 gold_inds = sample.get("gold_inds", []) or []
@@ -81,8 +82,8 @@ def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, stri
                 warnings.warn(f"No evidence chunks available for sample {sample_id} after initial selection.")
                 # Fallback to retrieval pipeline if not already using retrieval
                 if not use_retrieval:
-                    ids = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
-                    evidence_chunks = [c for c in all_chunks if c["chunk_id"] in ids]
+                    ret = retrieve_evidence(sample, question=question, top_k=10, bm25_k=10)
+                    evidence_chunks = ret.get("reranked_chunks", [])
                     logging.debug(f"Sample {sample_id} retrieval fallback chunk_ids: {[c['chunk_id'] for c in evidence_chunks]}")
                 # If still no evidence, skip this sample
                 if not evidence_chunks:
