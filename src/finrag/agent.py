@@ -84,7 +84,7 @@ Constraints:
         real_user,
     ]
     response = openai.ChatCompletion.create(
-        model="gpt-4-turbo-preview",
+        model="gpt-4.1-mini-2025-04-14",
         messages=messages,
         functions=FUNCTION_DEFINITIONS,
         function_call={"name": FUNCTION_NAME},
