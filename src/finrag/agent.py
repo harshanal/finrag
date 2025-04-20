@@ -1,3 +1,28 @@
+"""
+########################################################################
+# FinRAG Agent Module (agent.py)
+#
+# This module implements the "planning and execution" stage of the RAG pipeline:
+# 1. It accepts reranked evidence chunks and a user question.
+# 2. It formats the evidence into prompts for the LLM's function-calling API.
+# 3. generate_tool_call() constructs and validates a DSL program that computes
+#    the answer by invoking the math tool.
+# 4. plan_and_execute() orchestrates the tool call: it invokes generate_tool_call(),
+#    executes the returned DSL via run_math_tool(), captures intermediate values,
+#    formats the final answer, and returns a structured dict containing:
+#    - program: the DSL string
+#    - intermediates: the numeric steps
+#    - answer: the final formatted result
+#
+# Main functions:
+# - generate_tool_call(question, evidence_chunks, chat_history=None):
+#     Builds the function-calling JSON payload for the LLM based on question & evidence.
+# - plan_and_execute(question, evidence_chunks, chat_history=None):
+#     Runs generate_tool_call, executes the returned program, handles errors & fallbacks,
+#     and composes the final output.
+########################################################################
+"""
+
 """Agent module for FinRAG."""
 
 import json

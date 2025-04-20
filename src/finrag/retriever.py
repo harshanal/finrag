@@ -1,3 +1,22 @@
+"""
+########################################################################
+# FinRAG Retrieval Module (retriever.py)
+#
+# This module implements the "retrieval" stage of the RAG pipeline:
+# 1. It loads environment flags (USE_PINECONE) and initializes Pinecone client.
+# 2. pinecone_retrieve(query, top_k): uses stored vector embeddings to find top-k
+#    relevant chunks via cosine similarity.
+# 3. BM25Okapi: a pure-Python fallback retrieval algorithm that ranks text chunks
+#    by term-frequency/inverse-document-frequency scores.
+# 4. Hybrid retrieve_evidence(turn, question): orchestrates retrieval:
+#    a. If USE_PINECONE=True, calls pinecone_retrieve; logs & falls back if empty.
+#    b. If no Pinecone results or disabled, tokenizes candidate chunks and uses
+#       BM25Okapi to select top-bm25_k chunks.
+#    c. If raw chunks found, reranks with Cohere reranking API to refine top-k.
+#    d. Returns dict with 'raw_chunks' and 'reranked_chunks' ready for LLM.
+########################################################################
+"""
+
 """Retrieval module for FinRAG."""
 
 import logging
