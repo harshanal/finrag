@@ -1,25 +1,28 @@
 # scripts/upsert_to_pinecone.py
-import os
-import sys
-from dotenv import load_dotenv, find_dotenv
-from pinecone import Pinecone
-from tqdm import tqdm
-import uuid
-import logging
 import argparse
 import json
+import logging
+import os
+import sys
+import uuid
+
+from dotenv import find_dotenv, load_dotenv
+from pinecone import Pinecone
+from tqdm import tqdm
 
 # Add src directory to path to import finrag modules
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, os.path.join(project_root, 'src'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(project_root, "src"))
 
 # Import necessary modules from finrag (adjust paths/names if needed)
 try:
     # Import logging_conf just to ensure basicConfig is called
-    import finrag.logging_conf 
-    from finrag.utils import clean_env # Corrected clean_env import
+    import finrag.logging_conf
+    from finrag.data_loaders import (
+        load_files_from_directory,  # Corrected data_loader import
+    )
     from finrag.embeddings import EmbeddingStore
-    from finrag.data_loaders import load_files_from_directory # Corrected data_loader import
+    from finrag.utils import clean_env  # Corrected clean_env import
 except ImportError as e:
     print(f"Error importing FinRAG modules: {e}")
     print("Please ensure the src directory is in the Python path and necessary modules exist.")
@@ -29,17 +32,27 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-DATA_DIR = os.path.join(project_root, "data") # Assuming data is in project_root/data
+DATA_DIR = os.path.join(project_root, "data")  # Assuming data is in project_root/data
 PINECONE_UPSERT_BATCH_SIZE = 100
 # Add any chunking parameters if needed, e.g., CHUNK_SIZE = 1000
 
 # --------- CLI args for record limit and question log ---------
-parser = argparse.ArgumentParser(description="Pinecone upsert with record limit and question logging")
-parser.add_argument("--max-records", type=int, default=500, help="Maximum number of chunks to upsert")
-parser.add_argument("--question-log", type=str, default=os.path.join(project_root, "upsert_questions.jsonl"), help="Path to write sample_id and question log")
+parser = argparse.ArgumentParser(
+    description="Pinecone upsert with record limit and question logging"
+)
+parser.add_argument(
+    "--max-records", type=int, default=500, help="Maximum number of chunks to upsert"
+)
+parser.add_argument(
+    "--question-log",
+    type=str,
+    default=os.path.join(project_root, "upsert_questions.jsonl"),
+    help="Path to write sample_id and question log",
+)
 args = parser.parse_args()
 MAX_RECORDS = args.max_records
 QUESTION_LOG_PATH = args.question_log
+
 
 def upsert_data_to_pinecone():
     """Loads data, chunks it, gets embeddings, and upserts to Pinecone."""
@@ -105,7 +118,7 @@ def upsert_data_to_pinecone():
     # Iterate through the pre-processed chunks
     for chunk_data in tqdm(all_chunks, desc="Processing chunks"):
         # Create unique upsert ID to avoid overwriting existing vectors
-        base_id = chunk_data.get('chunk_id', '')
+        base_id = chunk_data.get("chunk_id", "")
         # Append short UUID suffix
         suffix = uuid.uuid4().hex[:8]
         chunk_id = f"{base_id}-{suffix}" if base_id else suffix
@@ -116,8 +129,8 @@ def upsert_data_to_pinecone():
             question = chunk_data.get("question", "")
             qlog.write(json.dumps({"sample_id": sample_id, "question": question}) + "\n")
 
-        chunk_text = chunk_data.get('text', '')
-        source_filename = chunk_data.get('source_filename', 'unknown_source')
+        chunk_text = chunk_data.get("text", "")
+        source_filename = chunk_data.get("source_filename", "unknown_source")
 
         if not chunk_text:
             logger.warning(f"Skipping empty content for chunk: {chunk_id}")
@@ -125,16 +138,15 @@ def upsert_data_to_pinecone():
 
         # Embed the chunk text
         try:
-            embedding = embed_store.get_embeddings([chunk_text])[0] # Get embedding for the single chunk
+            embedding = embed_store.get_embeddings([chunk_text])[
+                0
+            ]  # Get embedding for the single chunk
         except Exception as e:
             logger.error(f"Failed to get embedding for chunk {chunk_id}: {e}")
             continue
 
         # Prepare metadata (use text and source_filename from the chunk data)
-        metadata = {
-            "text": chunk_text,
-            "source": source_filename 
-        }
+        metadata = {"text": chunk_text, "source": source_filename}
 
         vectors_to_upsert.append((chunk_id, embedding, metadata))
 
@@ -146,7 +158,7 @@ def upsert_data_to_pinecone():
                 logger.info(f"Successfully upserted batch.")
             except Exception as e:
                 logger.error(f"Error during batch upsert: {e}")
-            vectors_to_upsert = [] # Reset batch
+            vectors_to_upsert = []  # Reset batch
 
     # Upsert any remaining vectors
     if vectors_to_upsert:
@@ -169,6 +181,7 @@ def upsert_data_to_pinecone():
         qlog.close()
 
     logger.info("Pinecone upsert process finished.")
+
 
 if __name__ == "__main__":
     upsert_data_to_pinecone()

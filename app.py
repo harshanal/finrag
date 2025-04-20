@@ -36,9 +36,6 @@ def load_data(split="dev"):
 
 st.title("FinRAG Interactive Demo")
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
 # Sidebar options and sample questions
 data = load_data()
 
@@ -62,15 +59,6 @@ for i, (sid, q) in enumerate(unique_qas):
     if col2.button("📋", key=f"copy_q_{i}"):
         st.session_state["selected_sample_id"] = sid
         st.session_state["question_input"] = q
-if st.sidebar.button("Clear Conversation"):
-    st.session_state.chat_history = []
-
-# Display past turns
-if st.session_state.chat_history:
-    st.subheader("Conversation History")
-    for idx, (q, a) in enumerate(st.session_state.chat_history, start=1):
-        st.markdown(f"**Q{idx}:** {q}")
-        st.markdown(f"**A{idx}:** {a}")
 
 # Main Input Panel
 st.subheader("Your Question")
@@ -105,8 +93,6 @@ if st.button("Run"):
 
             with st.spinner("Planning and executing..."):
                 result = plan_and_execute(question, reranked_chunks)
-                # Optionally track history without passing into LLM
-                st.session_state.chat_history.append((question, result["answer"]))
 
             # Results
             st.subheader("Generated Program")
