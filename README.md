@@ -105,7 +105,7 @@ cp .env.example .env      # Fill in API keys in .env
 poetry run streamlit run app.py
 ```
 
-## Contributing & Testing
+## Testing
 
 ```bash
 poetry run pytest
