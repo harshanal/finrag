@@ -21,3 +21,17 @@ def build_candidate_chunks(turn: Dict) -> List[Dict]:
     for idx, line in enumerate(turn.get("post_text", [])):
         candidate_chunks.append({"chunk_id": f"text:post:{idx}", "text": line})
     return candidate_chunks
+
+def chunk_text_content(text: str, min_chunk_len: int = 20) -> List[str]:
+    """Chunks text content into paragraphs (splitting by double newline).
+
+    Args:
+        text: The input text string.
+        min_chunk_len: Minimum character length for a chunk to be included.
+
+    Returns:
+        A list of text chunks.
+    """
+    chunks = [chunk.strip() for chunk in text.split('\n\n') if chunk.strip()]
+    # Filter out very short chunks
+    return [chunk for chunk in chunks if len(chunk) >= min_chunk_len]
