@@ -1,6 +1,37 @@
-# FinRAG
+# FinRAG: Financial Reasoning Assistant
 
-FinRAG is a Conversational QA Agent prototype for multi‑step quantitative questions on financial reports (text + tables).
+FinRAG is a Retrieval-Augmented Generation (RAG) system tailored for quantitative reasoning over financial reports, built on the ConvFinQA dataset. It orchestrates evidence retrieval, DSL planning, and numeric execution to answer complex questions.
+
+## RAG Pipeline Overview
+
+### 1. Data Loading & Chunking
+- **src/finrag/data_loaders.py**: Loads JSON ‘turn’ files, applies `build_candidate_chunks` to extract structured text and table chunks.
+- **src/finrag/chunk_utils.py**: Splits conversation turns into pre-text, table rows, and post-text chunks with unique IDs.
+
+### 2. Embedding & Indexing
+- **src/finrag/embeddings.py**: Wraps OpenAI/Cohere embedding APIs and caches embeddings in `data/embeddings.jsonl`.
+- **scripts/upsert_to_pinecone.py**: CLI for batching embeddings and upserting to Pinecone; supports record limits, logging, and unique IDs to prevent collisions.
+
+### 3. Retrieval
+- **src/finrag/retriever.py**: Implements hybrid retrieval:
+  1. **Pinecone** vector search when `USE_PINECONE=true`.
+  2. Fallback **BM25Okapi** scoring on tokenized chunks.
+  3. Cohere reranking to refine the top-k candidates.
+  Returns `raw_chunks` and `reranked_chunks` for downstream planning.
+
+### 4. Planning & Generation
+- **src/finrag/agent.py**: Manages LLM-based planning via function calling:
+  - `generate_tool_call()`: Formats question + evidence into a JSON function_call for the math DSL.
+  - `plan_and_execute()`: Invokes the tool call, runs the returned DSL through the math tool, captures intermediates, and formats the final answer.
+
+### 5. DSL Parsing & Execution
+- **src/finrag/dsl.py**: Defines the DSL grammar and helper functions:
+  - `parse_program()`, `serialize_program()`, and `execute_program()` to run DSL operations.
+- **src/finrag/calculator.py**: Core math operations (`add`, `subtract`, `multiply`, `divide`) and percentage formatting.
+
+### 6. Evaluation & CLI
+- **src/finrag/eval.py**: End-to-end evaluation script measuring execution accuracy, program match rate, and tool usage.
+- **src/finrag/cli.py**: Lightweight CLI for data inspection, embedding, and retrieval outside the Streamlit UI.
 
 ## Setup
 
@@ -62,3 +93,19 @@ poetry run pytest
 
 ```bash
 poetry run python eval.py --split dev --sample 5
+```
+
+## Setup & Usage
+
+```bash
+git clone https://github.com/harshanal/finrag.git
+cd finrag
+poetry install
+cp .env.example .env      # Fill in API keys in .env
+poetry run streamlit run app.py
+```
+
+## Contributing & Testing
+
+```bash
+poetry run pytest
