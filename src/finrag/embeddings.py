@@ -21,7 +21,7 @@ class EmbeddingStore:
     def get_embedding(self, text: str) -> List[float]:
         if text not in self._cache:
             # migrate to OpenAI Python v1: use embeddings endpoint
-            resp = openai.embeddings.create(model=self.model, input=[text])
+            resp = openai.Embedding.create(model=self.model, input=[text])
             embed = resp.data[0].embedding
             self._cache[text] = embed
             os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
@@ -34,7 +34,7 @@ class EmbeddingStore:
         missing = [t for t in texts if t not in self._cache]
         if missing:
             # batch‐fetch missing embeddings
-            resp = openai.embeddings.create(model=self.model, input=missing)
+            resp = openai.Embedding.create(model=self.model, input=missing)
             for t, d in zip(missing, resp.data):
                 emb = d.embedding
                 self._cache[t] = emb
