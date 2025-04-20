@@ -34,7 +34,8 @@ def load_data(split="dev"):
     with open(path) as f:
         return json.load(f)
 
-st.title("FinRAG Interactive Demo")
+st.title("FinRAG: Financial Reasoning Assistant")
+st.markdown("Ask a question based on financial reports about the ConvFinQA dataset")
 
 # Sidebar options and sample questions
 data = load_data()
@@ -42,8 +43,6 @@ data = load_data()
 # Initialize session state for selected sample and question
 if "selected_sample_id" not in st.session_state and data:
     st.session_state["selected_sample_id"] = data[0].get("id")
-if "question_input" not in st.session_state and data:
-    st.session_state["question_input"] = data[0].get("qa", {}).get("question", "")
 
 # Sample Questions Sidebar
 raw_qas = [(s.get("id"), s.get("qa", {}).get("question")) for s in data if s.get("qa", {}).get("question")]
@@ -61,10 +60,8 @@ for i, (sid, q) in enumerate(unique_qas):
         st.session_state["question_input"] = q
 
 # Main Input Panel
-st.subheader("Your Question")
 question = st.text_area(
-    "Enter your financial question:",
-    value=st.session_state["question_input"],
+    "",
     key="question_input",
     height=100,
 )
