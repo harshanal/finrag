@@ -140,7 +140,14 @@ def retrieve_evidence(
     if not raw_chunks:
          logger.info("Using BM25 retrieval.")
          try:
-             raw_chunks = bm25_retrieve(question, bm25_k)
+             # BM25 fallback using BM25Okapi
+             candidate_chunks = build_candidate_chunks(turn)
+             docs = [c["text"] for c in candidate_chunks]
+             tokenized = [doc.split() for doc in docs]
+             bm25 = BM25Okapi(tokenized)
+             scores = bm25.get_scores(question.split())
+             top_idxs = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:bm25_k]
+             raw_chunks = [candidate_chunks[i] for i in top_idxs]
              if raw_chunks:
                  retrieval_source = "BM25"
                  logger.debug(f"BM25 returned {len(raw_chunks)} chunks.")
@@ -148,7 +155,7 @@ def retrieve_evidence(
                  logger.warning("BM25 retrieval returned no results.")
          except Exception as e:
              logger.error(f"BM25 retrieval failed: {e}")
-             raw_chunks = [] # Ensure empty on BM25 failure
+             raw_chunks = []
 
     # === FINAL CHECK before Reranking ===
     if not raw_chunks:

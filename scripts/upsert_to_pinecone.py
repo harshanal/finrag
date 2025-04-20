@@ -6,6 +6,8 @@ from pinecone import Pinecone
 from tqdm import tqdm
 import uuid
 import logging
+import argparse
+import json
 
 # Add src directory to path to import finrag modules
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -30,6 +32,14 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.path.join(project_root, "data") # Assuming data is in project_root/data
 PINECONE_UPSERT_BATCH_SIZE = 100
 # Add any chunking parameters if needed, e.g., CHUNK_SIZE = 1000
+
+# --------- CLI args for record limit and question log ---------
+parser = argparse.ArgumentParser(description="Pinecone upsert with record limit and question logging")
+parser.add_argument("--max-records", type=int, default=500, help="Maximum number of chunks to upsert")
+parser.add_argument("--question-log", type=str, default=os.path.join(project_root, "upsert_questions.jsonl"), help="Path to write sample_id and question log")
+args = parser.parse_args()
+MAX_RECORDS = args.max_records
+QUESTION_LOG_PATH = args.question_log
 
 def upsert_data_to_pinecone():
     """Loads data, chunks it, gets embeddings, and upserts to Pinecone."""
@@ -68,8 +78,6 @@ def upsert_data_to_pinecone():
     # --- Load and Process Files ---
     logger.info(f"Loading files from directory: {DATA_DIR}")
     try:
-        # Assuming load_files_from_directory returns a list of objects/dicts
-        # where each has a 'filepath' and 'content' key. Adjust if needed.
         all_chunks = load_files_from_directory(DATA_DIR)
         if not all_chunks:
             logger.warning(f"No chunks found in {DATA_DIR}.")
@@ -79,11 +87,35 @@ def upsert_data_to_pinecone():
         logger.error(f"Failed to load chunks from {DATA_DIR}: {e}")
         return
 
+    # Apply record limit
+    if MAX_RECORDS is not None:
+        all_chunks = all_chunks[:MAX_RECORDS]
+        logger.info(f"Limiting to first {len(all_chunks)} chunks (max_records={MAX_RECORDS}).")
+
+    # Open question log file
+    try:
+        qlog = open(QUESTION_LOG_PATH, "w", encoding="utf-8")
+        logger.info(f"Question log file: {QUESTION_LOG_PATH}")
+    except Exception as e:
+        logger.error(f"Cannot open question log file {QUESTION_LOG_PATH}: {e}")
+        qlog = None
+
     vectors_to_upsert = []
 
     # Iterate through the pre-processed chunks
     for chunk_data in tqdm(all_chunks, desc="Processing chunks"):
-        chunk_id = chunk_data.get('chunk_id', str(uuid.uuid4())) # Use chunk_id or generate UUID
+        # Create unique upsert ID to avoid overwriting existing vectors
+        base_id = chunk_data.get('chunk_id', '')
+        # Append short UUID suffix
+        suffix = uuid.uuid4().hex[:8]
+        chunk_id = f"{base_id}-{suffix}" if base_id else suffix
+
+        # Log sample id and question
+        if qlog:
+            sample_id = chunk_data.get("sample_id", "")
+            question = chunk_data.get("question", "")
+            qlog.write(json.dumps({"sample_id": sample_id, "question": question}) + "\n")
+
         chunk_text = chunk_data.get('text', '')
         source_filename = chunk_data.get('source_filename', 'unknown_source')
 
@@ -131,6 +163,10 @@ def upsert_data_to_pinecone():
         logger.info(f"Final index stats: {final_stats}")
     except Exception as e:
         logger.error(f"Failed to get final index stats: {e}")
+
+    # Close question log
+    if qlog:
+        qlog.close()
 
     logger.info("Pinecone upsert process finished.")
 
