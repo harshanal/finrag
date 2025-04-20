@@ -33,32 +33,35 @@ FinRAG is a Retrieval-Augmented Generation (RAG) system tailored for quantitativ
 - **src/finrag/eval.py**: End-to-end evaluation script measuring execution accuracy, program match rate, and tool usage.
 - **src/finrag/cli.py**: Lightweight CLI for data inspection, embedding, and retrieval outside the Streamlit UI.
 
-## Setup
+## Models
 
-```bash
-pipx install poetry
-git clone https://github.com/harshanal/finrag.git finrag
-cd finrag
-poetry install
-poetry shell
-```
+### OPENAI_CHAT_MODEL
 
-## Environment Variables
+Default: `gpt-4.1-mini-2025-04-14`  
+Used by the LLM (`openai.ChatCompletion`) for planning and generating DSL-based math programs. Selected for its robust function-calling support, strong reasoning capabilities, and balanced latency/cost profile.
 
-This project requires API keys from OpenAI, Pinecone, and Cohere.
+### EMBEDDING_MODEL
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
+Default: `text-embedding-ada-002`  
+Employed to compute semantic embeddings for text and table chunks. Chosen for high-quality embeddings, efficient performance, and cost-effectiveness in large-scale retrieval scenarios.
 
-2. Fill in the API keys in the `.env` file.
+These variables can be customised in your `.env` file to experiment with different OpenAI models.
 
-    ```bash
-    OPENAI_API_KEY=your-openai-key
-    PINECONE_API_KEY=your-pinecone-key
-    COHERE_API_KEY=your-cohere-key
-    ```
+## Documentation
+FinRAG's supplementary guides and logs are available in the `docs/` folder:
+
+| Document                   | Path                                    | Description                                           |
+|----------------------------|-----------------------------------------|-------------------------------------------------------|
+| Product Requirements       | [docs/PRD.md](docs/PRD.md)                             | Objectives, features, non-functional requirements     |
+| Design & Architecture      | [docs/design_architecture.md](docs/design_architecture.md) | System design, data flow, component overview          |
+| Engineering Log            | [docs/engineering_log.md](docs/engineering_log.md)         | Development milestones, decisions, challenges         |
+| Evaluation                 | [docs/evaluation.md](docs/evaluation.md)                   | Evaluation metrics, CLI usage, sample outputs         |
+| Production Planning        | [docs/productionisation_plan.md](docs/productionisation_plan.md) | Production readiness, observability, cost strategies  |
+| Requirements & Setup       | [docs/requirements_setup.md](docs/requirements_setup.md)   | Setup guide: dependencies, env vars, directory layout |
+| Streamlit UI Walkthrough   | [docs/streamlit_ui_walkthrough.md](docs/streamlit_ui_walkthrough.md) | Streamlit interface guide with screenshots            |
+| Test Suite Summary         | [docs/test_suite_summary.md](docs/test_suite_summary.md)   | Automated test overview: coverage, mocks, outputs     |
+
+For a concise pipeline summary, see the PRD and Design docs.
 
 ## Dataset
 This project uses data from the ConvFinQA dataset, which provides conversational question-answer pairs over financial documents.
@@ -74,7 +77,7 @@ Below is a brief description of each module in `src/finrag`:
 - **chunk_utils.py**: Contains logic to split raw transcript turns into candidate text chunks, filtering by length and metadata.
 - **cli.py**: Provides a command-line interface for simple data loading, embedding, and retrieval operations outside of the web UI.
 - **data_loaders.py**: Loads JSON files from disk, applies `build_candidate_chunks`, and returns structured chunks with metadata.
-- **dsl.py**: Defines the DSL grammar and utilities for serializing/deserializing programs to and from JSON.
+- **dsl.py**: Defines the DSL grammar and utilities for serialising/deserialising programs to and from JSON.
 - **embeddings.py**: Wraps the OpenAI/Cohere embedding APIs to produce vector representations for texts.
 - **eval.py**: Runs end-to-end evaluation on a dataset split, measuring execution accuracy, program match rate, and tool usage rate.
 - **index_embeddings_pinecone.py**: Standalone script to compute embeddings and build a Pinecone index from raw data chunks.
@@ -88,19 +91,11 @@ Below is a brief description of each module in `src/finrag`:
 ```bash
 poetry run pytest
 ```
+See the [Test Suite Summary](docs/test_suite_summary.md) for further details about tests.
 
 ## Evaluation
 
 ```bash
 poetry run python eval.py --split dev --sample 5
 ```
-
-## Setup & Usage
-
-```bash
-git clone https://github.com/harshanal/finrag.git
-cd finrag
-poetry install
-cp .env.example .env      # Fill in API keys in .env
-poetry run streamlit run app.py
-```
+See the [Evaluation](docs/evaluation.md) section for details about evals methodology.

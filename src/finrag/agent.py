@@ -32,7 +32,6 @@ import re
 from typing import Any, Dict, List, Tuple, Optional
 from finrag.tools import MathToolInput, run_math_tool
 import logging
-from finrag.utils import clean_env
 
 # logger for debugging
 logger = logging.getLogger(__name__)
@@ -119,7 +118,7 @@ Constraints:
         real_user,
     ]
     response = openai.ChatCompletion.create(
-        model=clean_env("OPENAI_CHAT_MODEL"),
+        model="gpt-4.1-mini-2025-04-14",
         messages=messages,
         functions=FUNCTION_DEFINITIONS,
         function_call={"name": FUNCTION_NAME},

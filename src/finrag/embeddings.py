@@ -4,18 +4,13 @@ from typing import Dict, List
 
 import jsonlines
 import openai
-from finrag.utils import clean_env
 
 
 class EmbeddingStore:
     """Cache and retrieve text embeddings using OpenAI."""
 
-    def __init__(self, model: str = None):
-        """
-        Initialize the embedding store with a model name. If model is not provided,
-        fallback to EMBEDDING_MODEL from environment variables.
-        """
-        self.model = model or clean_env("EMBEDDING_MODEL")
+    def __init__(self, model: str = "text-embedding-ada-002"):
+        self.model = model
         self.cache_path = os.path.join(os.getcwd(), "data", "embeddings.jsonl")
         self._cache: Dict[str, List[float]] = {}
         if os.path.exists(self.cache_path):
