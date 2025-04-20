@@ -63,7 +63,7 @@ This project requires API keys from OpenAI, Pinecone, and Cohere.
 ## Dataset
 This project uses data from the ConvFinQA dataset, which provides conversational question-answer pairs over financial documents.
 
-Download it from: [https://github.com/yangji9181/ConvFinQA](https://github.com/yangji9181/ConvFinQA)
+Download it from: [https://github.com/czyssrs/ConvFinQA](https://github.com/czyssrs/ConvFinQA)
 
 ## Source File Overview
 
