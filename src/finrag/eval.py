@@ -11,6 +11,10 @@ from collections import defaultdict
 import finrag.logging_conf  # configure global logging
 import logging
 
+# --- W&B Import ---
+import wandb
+# --- End W&B Import ---
+
 from finrag.agent import plan_and_execute, FUNCTION_NAME
 from finrag.chunk_utils import build_candidate_chunks
 from finrag.retriever import retrieve_evidence
@@ -34,7 +38,16 @@ def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, stri
     # Iterate through each conversation
     for conv_id, samples in conv_groups.items():
         # Sort turns by turn index from id suffix
-        turns = sorted(samples, key=lambda s: int(s.get("id", "").rsplit("_",1)[1]))
+        # Original logic assumed IDs like convID_turnIdx
+        # turns = sorted(samples, key=lambda s: int(s.get("id", "").rsplit("_",1)[1]))
+        # Corrected logic for IDs like someID-turnIdx
+        try:
+            turns = sorted(samples, key=lambda s: int(s.get("id", "").rsplit("-",1)[-1]))
+        except (ValueError, IndexError) as e:
+            # Handle cases where ID format might be unexpected or splitting fails
+            warnings.warn(f"Could not sort turns for conv_id '{conv_id}' due to ID format error: {e}. Processing in original order.")
+            turns = samples # Process in unsorted order if sorting fails
+
         chat_history: List[Tuple[str, str]] = []
         for sample in turns:
             sample_id = sample.get("id")
@@ -137,42 +150,129 @@ def main():
     parser.add_argument("--strict", action="store_true", help="Raise on invalid samples")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--retrieval", action="store_true")
+    # --- W&B: Add argument for run name/notes (optional) ---
+    parser.add_argument("--wandb_notes", type=str, default=None, help="Optional notes for the W&B run.")
+    parser.add_argument("--wandb_tags", nargs='+', default=[], help="Optional tags for the W&B run (e.g., --wandb_tags baseline markdown_chunking).")
+    parser.add_argument("--wandb_project", type=str, default="finrag-eval", help="W&B project name.")
+    # --- End W&B Arguments ---
     args = parser.parse_args()
+
+    # --- W&B: Initialize Run --- 
+    try:
+        run = wandb.init(
+            project=args.wandb_project,
+            config=vars(args), # Log all argparse arguments
+            notes=args.wandb_notes,
+            tags=args.wandb_tags,
+            reinit=True, # Allows running multiple evals in one script if needed later
+            job_type="evaluation"
+        )
+        print(f"W&B Run initialized: {run.url}")
+    except Exception as e:
+        print(f"Error initializing W&B: {e}. Tracking disabled for this run.")
+        run = None # Set run to None if init fails
+    # --- End W&B Init ---
 
     # configure logging for verbose debug
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    data_path = os.path.join(os.getcwd(), "data", f"{args.split}_turn.json")
+    # Construct data path using the split argument, removing the '_turn' suffix assumption
+    data_path = os.path.join(os.getcwd(), "data", f"{args.split}.json")
+    print(f"Attempting to load data from: {data_path}") # Add print statement for debugging
     if not os.path.isfile(data_path):
-        raise FileNotFoundError(f"Data file not found: {data_path}")
-    with open(data_path) as f:
-        data = json.load(f)
+        # --- W&B: Log error and finish if file not found ---
+        error_msg = f"Data file not found: {data_path}"
+        print(f"Error: {error_msg}")
+        if run:
+             wandb.log({"error": error_msg})
+             run.finish(exit_code=1)
+        # --- End W&B Error Log ---
+        raise FileNotFoundError(error_msg)
 
-    if args.sample and args.sample < len(data):
+    # Ensure correct encoding is specified when opening
+    try:
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+         # --- W&B: Log error and finish if file load fails ---
+        error_msg = f"Failed to load or parse data file {data_path}: {e}"
+        print(f"Error: {error_msg}")
+        if run:
+             wandb.log({"error": error_msg})
+             run.finish(exit_code=1)
+        # --- End W&B Error Log ---
+        raise # Re-raise the exception
+
+    if args.sample and args.sample > 0 and args.sample < len(data):
+        print(f"Sampling {args.sample} random entries from the data.") # Clarify sampling
         data = random.sample(data, args.sample)
+    elif args.sample:
+        print(f"Warning: Sample size {args.sample} is invalid or >= total entries {len(data)}. Processing all {len(data)} entries.")
 
-    report = evaluate_agent(data, use_retrieval=args.retrieval, strict=args.strict)
-    total = report["total"]
-    def pct(x: float) -> str:
-        return f"{x*100:.2f}%"
+    print(f"Starting evaluation with {len(data)} samples...")
+    try:
+        report = evaluate_agent(data, use_retrieval=args.retrieval, strict=args.strict)
+        total = report["total"]
+        def pct(x: float) -> str:
+            return f"{x*100:.2f}%"
 
-    print(f"Total samples: {total}")
-    print(f"Execution Accuracy: {pct(report['execution_accuracy'])}")
-    print(f"Program Match Rate: {pct(report['program_match_rate'])}")
-    print(f"Tool Usage Rate: {pct(report['tool_usage_rate'])}")
-    print(f"Failures: {len(report['failures'])}")
+        print(f"Total samples processed: {total}")
+        print(f"Execution Accuracy: {pct(report['execution_accuracy'])}")
+        print(f"Program Match Rate: {pct(report['program_match_rate'])}")
+        print(f"Tool Usage Rate: {pct(report['tool_usage_rate'])}")
+        print(f"Failures: {len(report['failures'])}")
 
-    out_dir = "outputs"
-    os.makedirs(out_dir, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(out_dir, f"eval_{args.split}_{ts}.jsonl")
-    with open(log_file, "w") as f:
-        for ex in report["examples"]:
-            f.write(json.dumps(ex))
-            f.write("\n")
-    print(f"Full log: {log_file}")
+        # --- W&B: Log Metrics ---
+        if run:
+            wandb.log({
+                "total_samples_processed": total,
+                "execution_accuracy": report['execution_accuracy'],
+                "program_match_rate": report['program_match_rate'],
+                "tool_usage_rate": report['tool_usage_rate'],
+                "failure_count": len(report['failures']),
+                "samples_in_split_used": len(data) # Log how many samples were actually used (after sampling)
+            })
+        # --- End W&B Log Metrics ---
 
+        out_dir = "outputs"
+        os.makedirs(out_dir, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file_name = f"eval_{args.split}{f'_sample{args.sample}' if args.sample else ''}_{ts}.jsonl"
+        log_file_path = os.path.join(out_dir, log_file_name)
+        with open(log_file_path, "w") as f:
+            for ex in report["examples"]:
+                f.write(json.dumps(ex))
+                f.write("\n")
+        print(f"Full log: {log_file_path}")
+
+        # --- W&B: Log Output File as Artifact ---
+        if run:
+            try:
+                artifact = wandb.Artifact(f'eval_results_{args.split}', type='evaluation-results')
+                artifact.add_file(log_file_path)
+                run.log_artifact(artifact)
+                print(f"Evaluation results artifact uploaded to W&B.")
+            except Exception as e:
+                print(f"Warning: Failed to log artifact to W&B: {e}")
+        # --- End W&B Log Artifact ---
+
+    except Exception as e:
+        print(f"\n--- Evaluation failed with error: {e} ---")
+        logging.error("Evaluation failed", exc_info=True)
+         # --- W&B: Log error and finish if evaluation fails ---
+        if run:
+            wandb.log({"error": str(e)})
+            run.finish(exit_code=1)
+        # --- End W&B Error Log ---
+        # Optionally re-raise or handle differently
+        # raise e 
+
+    finally:
+        # --- W&B: Finish Run ---
+        if run:
+            run.finish()
+        # --- End W&B Finish ---
 
 if __name__ == "__main__":
     main()
