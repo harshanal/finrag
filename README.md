@@ -10,7 +10,15 @@ FinRAG is a Retrieval-Augmented Generation (RAG) system tailored for quantitativ
 
 ### 2. Embedding & Indexing
 - **src/finrag/embeddings.py**: Wraps OpenAI/Cohere embedding APIs and caches embeddings in `data/embeddings.jsonl`.
-- **scripts/upsert_to_pinecone.py**: CLI for batching embeddings and upserting to Pinecone; supports record limits, logging, and unique IDs to prevent collisions.
+- **scripts/upsert_to_pinecone.py**: CLI script to batch process chunk embeddings and upsert them into a Pinecone index. Supports:
+  - `--max-records <N>` to limit chunks uploaded
+  - `--question-log <path>` to log sample IDs and questions
+  - Automatic unique ID suffixes to avoid vector collisions
+Requires the following environment variables (e.g., in `.env`): `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`.
+Example usage:
+```bash
+python scripts/upsert_to_pinecone.py --max-records 1000 --question-log queries.jsonl
+```
 
 ### 3. Retrieval
 - **src/finrag/retriever.py**: Implements hybrid retrieval:

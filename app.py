@@ -1,6 +1,5 @@
 import os
 import sys
-import math
 
 # Ensure src is on path for package imports
 sys.path.insert(0, os.path.abspath("src"))
@@ -44,20 +43,16 @@ data = load_data()
 if "selected_sample_id" not in st.session_state and data:
     st.session_state["selected_sample_id"] = data[0].get("id")
 
-# Sample Questions Sidebar
-raw_qas = [(s.get("id"), s.get("qa", {}).get("question")) for s in data if s.get("qa", {}).get("question")]
-seen = set(); unique_qas = []
-for sid, q in raw_qas:
-    if q not in seen:
-        seen.add(q); unique_qas.append((sid, q))
-unique_qas = unique_qas[:20]
-st.sidebar.markdown("### Sample Questions")
-for i, (sid, q) in enumerate(unique_qas):
-    col1, col2 = st.sidebar.columns([5,1])
-    col1.markdown(f"- {q}")
-    if col2.button("📋", key=f"copy_q_{i}"):
-        st.session_state["selected_sample_id"] = sid
-        st.session_state["question_input"] = q
+# Quick-Pick Questions Sidebar
+questions_file = os.path.join("scripts", "upsert_questions.jsonl")
+if os.path.isfile(questions_file):
+    with open(questions_file, "r", encoding="utf-8") as f:
+        quick_qs = [json.loads(line) for line in f]
+    st.sidebar.markdown("### Quick Questions")
+    for i, item in enumerate(quick_qs):
+        q = item.get("question", "")
+        if st.sidebar.button(q, key=f"quick_{i}"):
+            st.session_state["question_input"] = q
 
 # Main Input Panel
 question = st.text_area(

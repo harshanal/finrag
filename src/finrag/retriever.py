@@ -119,13 +119,13 @@ def pinecone_retrieve(query: str, top_k: int = 20) -> List[Dict[str, Any]]:
     chunks: List[Dict[str, Any]] = []
     for m in response.matches:
         meta = m.metadata
-        chunks.append(
-            {
-                "chunk_id": meta.get("chunk_id"),
-                "text": meta.get("text", ""),
-                "score": m.score,
-            }
-        )
+        # Fallback: use m.id if metadata.chunk_id is missing
+        cid = meta.get("chunk_id") or m.id
+        chunks.append({
+            "chunk_id": cid,
+            "text": meta.get("text", ""),
+            "score": m.score,
+        })
     return chunks
 
 
