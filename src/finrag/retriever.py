@@ -104,18 +104,27 @@ class BM25Okapi:
         return scores
 
 
-def pinecone_retrieve(query: str, top_k: int = 20) -> List[Dict[str, Any]]:
-    """Retrieve similar chunks from Pinecone index."""
-    if not PINECONE_INDEX:  # Add check
-        print("Error: Pinecone index not available for retrieval.")
+def pinecone_retrieve(query: str, top_k: int = 20, doc_id: str | None = None) -> List[Dict[str, Any]]:
+    """Retrieve similar chunks from Pinecone index, optionally filtering by doc_id."""
+    if not PINECONE_INDEX:
+        logger.error("Pinecone index not available for retrieval.")
         return []
     store = EmbeddingStore()
     q_embed = store.get_embedding(query)
-    response = PINECONE_INDEX.query(
-        vector=q_embed,
-        top_k=top_k,
-        include_metadata=True,
-    )
+
+    query_params = {
+        "vector": q_embed,
+        "top_k": top_k,
+        "include_metadata": True,
+    }
+    if doc_id:
+        logger.debug(f"Applying Pinecone filter for doc_id: {doc_id}")
+        query_params["filter"] = {"doc_id": {"$eq": doc_id}}
+    else:
+        logger.debug("No doc_id provided, performing unfiltered Pinecone query.")
+
+    response = PINECONE_INDEX.query(**query_params)
+
     chunks: List[Dict[str, Any]] = []
     for m in response.matches:
         meta = m.metadata
@@ -130,9 +139,15 @@ def pinecone_retrieve(query: str, top_k: int = 20) -> List[Dict[str, Any]]:
 
 
 def retrieve_evidence(
-    turn: Dict[str, Any], question: str, top_k: int = 8, bm25_k: int = 20
+    turn: Dict[str, Any], question: str, top_k: int = 8, bm25_k: int = 50
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Hybrid retrieval: BM25 + embedding fusion. Returns raw_chunks and reranked_chunks with scores."""
+    # --- START CONFIGURATION ---
+    # Increase the number of candidates fetched initially from Pinecone
+    # The final result will still be reranked down to `top_k`
+    pinecone_query_top_k = 50 # Increased from just using `top_k`
+    # --- END CONFIGURATION ---
+
     # Gold-index fallback for dev set: use annotated chunks directly
     gold_inds = turn.get("gold_inds")  # Use .get() which returns None if not present
     if gold_inds is not None:
@@ -151,12 +166,18 @@ def retrieve_evidence(
     # --- Start Retrieval ---
     raw_chunks = []  # Initialize
     retrieval_source = "None"
+    # Extract doc_id from the turn for potential filtering
+    doc_id_to_filter = turn.get("filename") # Assuming 'filename' is the doc_id
+    if not doc_id_to_filter:
+         logger.warning(f"Could not find 'filename' (doc_id) in input turn for potential filtering.")
 
     # 1. Try Pinecone if enabled
     if USE_PINECONE:
         try:
-            logger.debug(f"Attempting Pinecone retrieval for query: {question[:50]}...")
-            raw_chunks = pinecone_retrieve(question, top_k)
+            logger.debug(f"Attempting Pinecone retrieval for query: {question[:50]}... DocID: {doc_id_to_filter}, Requesting Top K: {pinecone_query_top_k}")
+            # --- START MODIFICATION: Use larger K for Pinecone query --- 
+            raw_chunks = pinecone_retrieve(question, pinecone_query_top_k, doc_id=doc_id_to_filter) # Use pinecone_query_top_k
+            # --- END MODIFICATION ---
             if not raw_chunks:
                 logger.warning("Pinecone retrieval returned no results.")
             else:
@@ -204,7 +225,7 @@ def retrieve_evidence(
             model="rerank-english-v2.0",
             query=question,
             documents=docs,
-            top_n=top_k,
+            top_n=top_k, # Use the original top_k here for the final reranked list
         )
         reranked_chunks = [
             {

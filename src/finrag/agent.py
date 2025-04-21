@@ -72,36 +72,65 @@ def generate_tool_call(
     )
     # system prompt
     system_prompt = """IMPORTANT: Reply ONLY with a JSON function_call using the provided schema; do NOT include any explanations or plain text.
-You are an expert financial analyst AI. Your task is to answer questions based on provided evidence by generating a program for a simple math DSL. 
-Follow these steps carefully:
-1. Understand the Question: Identify the core calculation needed (e.g., sum, difference, percentage change).
-2. Analyze Evidence: Scan the provided evidence text snippets (e.g., '[c1] Some text with numbers 123 and 456') to find the specific numerical values required by the question. Pay close attention to units (e.g., millions, thousands) and time periods (e.g., 2015, 2016).
-   - Ensure numbers extracted account for units (e.g., if evidence says '2.2 billion' and other numbers are in millions, use 2200).
-3. Select Arguments: Extract the *exact* numerical values from the evidence that correspond to the concepts in the question. DO NOT use years (like 2015) as calculation arguments unless the question specifically asks for calculations on the years themselves. Use the numbers *associated* with those years in the evidence.
-4. Formulate DSL Program: Construct a program using ONLY the allowed DSL functions: `add`, `subtract`, `multiply`, `divide`. The program must be a flat sequence of comma-separated calls, like `func1(arg1, arg2), func2(#0, arg3)`. Use `#N` to reference the result of the N-th previous step (0-indexed). 
-   - Example Percentage Change (New - Old) / Old: `subtract(NewValue, OldValue), divide(#0, OldValue)`
-   - Example Sum: `add(Value1, Value2), add(#0, Value3)`
-5. Output Format: Respond ONLY with a JSON object containing the function call, like `{"function_call": {"name": "run_math_tool", "arguments": "{\"program\": \"YOUR_DSL_PROGRAM_HERE\"}"}}`. Do not include any other text, explanations, or markdown formatting.
+You are an expert financial analyst AI. Your task is to answer questions based on provided evidence by generating a program for a simple math DSL.
+The evidence may contain text snippets and Markdown tables. Follow these steps carefully:
+
+1.  **Understand the Question:** Identify the core calculation needed (e.g., sum, difference, percentage change) and the specific financial metrics and time periods (e.g., years) involved.
+2.  **Analyze Evidence & Locate Values:** Scan the provided evidence text snippets AND **carefully parse any Markdown tables**.
+    *   **Markdown Table Structure:** Tables look like `| Metric | Year1 | Year2 |\n|---|---|---|\n| Net Sales | 100 | 120 |\n| Expenses | 60 | 70 |`. The first column usually contains the metric names/row descriptions, and subsequent columns often represent time periods (like years) or categories.
+    *   **CRITICAL LOOKUP STEP:** You **MUST** find the specific table row matching the metric requested (e.g., find the row starting with 'Net Sales') AND the specific table column matching the time period/category requested (e.g., find the column header 'Year2'). The number you need is at the intersection of that specific row and column (e.g., 120 in the example). Do not just grab the first number you see.
+    *   **Pay attention to units** mentioned in text or headers (e.g., millions, thousands), though direct conversion isn't usually needed unless units differ drastically between values used in the *same* calculation.
+3.  **Extract & Clean Arguments:** Extract the *exact* numerical values located in step 2. **Clean the numbers before using them:** Remove currency symbols ('$') and commas (','). Keep the decimal point ('.') and a leading minus sign ('-') if present. Parentheses around a number, like '(500)', usually indicate a negative number, so convert it to '-500'. 
+    *   Example: '$1,234.5' becomes '1234.5'
+    *   Example: '(500)' becomes '-500'
+    *   Example: '6,789' becomes '6789'
+    *   Example: '15%' becomes '0.15' (Convert percentages to decimals if they need to be used in calculations, unless the question implies using the whole number).
+    *   DO NOT use years (like 2015) as calculation arguments unless the question specifically asks for calculations *on* the years themselves.
+4.  **Formulate DSL Program:** Construct a program using ONLY the allowed DSL functions: `add`, `subtract`, `multiply`, `divide`. The program must be a flat sequence of comma-separated calls, like `func1(arg1, arg2), func2(#0, arg3)`. Use `#N` to reference the result of the N-th previous step (0-indexed).
+    *   Example Percentage Change (New - Old) / Old: `subtract(NewValue, OldValue), divide(#0, OldValue)` (NewValue and OldValue must be cleaned numbers found by correlating row/column in the table or text).
+    *   Example Sum: `add(Value1, Value2), add(#0, Value3)` (Values must be cleaned numbers).
+5.  **Output Format:** Respond ONLY with a JSON object containing the function call, like `{"function_call": {"name": "run_math_tool", "arguments": "{\"program\": \"YOUR_DSL_PROGRAM_HERE\"}"}}`. Do not include any other text, explanations, or markdown formatting.
+
 Constraints:
 - DO NOT nest function calls (e.g., `divide(subtract(a,b), b)` is INVALID).
-- Use only numbers found/derived from the evidence (after adjusting for units) or simple constants (like 100) as arguments.
+- Use only **cleaned** numbers found/derived from the evidence or simple constants (like 100) as arguments.
 - Ensure the program logically answers the question posed.
 """
     # few-shot demonstrations
-    # Example 1: simple percentage change
+    # Example 1: Percentage change using Markdown table (Keep as is)
     demo1_user = (
-        "Question: What is the percentage change from 50 to 75?\n"
-        "Relevant evidence:\n1. [c1] Value was 50 in 2020.\n2. [c2] Value was 75 in 2021.\n"
+        "Question: What was the percentage change in Net Sales from 2000 to 2001?\n"
+        "Relevant evidence:\n"
+        "Evidence 1 (ID: AAPL/2002/page_23.pdf::table:full):\n"
+        "|                   |  2002 |  2001 |  2000 |\n"
+        "|-------------------|-------|-------|-------|\n"
+        "| Net sales         | $5742 | $5363 | $7983 |\n"
+        "| Cost of sales     |  4139 |  4128 |  5817 |\n"
+        "| Gross margin      | $1603 | $1235 | $2166 |\n"
+        "---\n"
         "Emit ONLY a function call."
     )
-    demo1_assist = {"role": "assistant", "function_call": {"name": FUNCTION_NAME, "arguments": json.dumps({"program": "subtract(75, 50), divide(#0, 50)"})}}
-    # Example 2: basis point variation
+    # Assistant extracts 5363 (for 2001) and 7983 (for 2000) from the 'Net sales' row
+    demo1_assist = {"role": "assistant", "function_call": {"name": FUNCTION_NAME, "arguments": json.dumps({"program": "subtract(5363, 7983), divide(#0, 7983)"})}}
+
+    # Example 2: Difference using Markdown table requiring specific lookup
     demo2_user = (
-        "Question: What is the basis point variation in margin from 20% to 25%?\n"
-        "Relevant evidence:\n1. [c1] Margin was 20% in 2020.\n2. [c2] Margin was 25% in 2021.\n"
+        "Question: What was the difference in Cost of Sales between 2002 and 2000?\n"
+        "Relevant evidence:\n"
+        "Evidence 1 (ID: AAPL/2002/page_23.pdf::table:full):\n"
+        "|                   |  2002 |  2001 |  2000 |\n"
+        "|-------------------|-------|-------|-------|\n"
+        "| Net sales         | $5742 | $5363 | $7983 |\n"
+        "| Cost of sales     |  4139 |  4128 |  5817 |\n"
+        "| Gross margin      | $1603 | $1235 | $2166 |\n"
+        "---\n"
+        "Evidence 2 (ID: some_doc::text:0): Some unrelated text\n"
+        "---\n"
         "Emit ONLY a function call."
     )
-    demo2_assist = {"role": "assistant", "function_call": {"name": FUNCTION_NAME, "arguments": json.dumps({"program": "subtract(25, 20), multiply(#0, 100)"})}}
+     # Assistant looks up 'Cost of sales' row, finds 4139 for 2002 and 5817 for 2000
+    demo2_assist = {"role": "assistant", "function_call": {"name": FUNCTION_NAME, "arguments": json.dumps({"program": "subtract(4139, 5817)"})}}
+
     # real user query
     real_user = {"role": "user", "content": f"Question: {question}\nRelevant evidence:\n{evidence_text}\nEmit ONLY a function call."}
     # Build chat messages: system, history (if any), few-shot demos, then current query

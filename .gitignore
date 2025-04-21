@@ -19,7 +19,6 @@ __pycache__/
 # data files
 data/
 
-
 # build files
 src/finrag.egg-info/
 
@@ -31,3 +30,9 @@ outputs/
 
 # manual test files
 manual_test.py
+
+# weights and biases
+wandb/
+
+# wip
+docs/prd2.md
