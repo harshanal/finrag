@@ -302,9 +302,3 @@ Build a repeatable CLI to embed and upsert data chunks into Pinecone with tracea
   - The UI was enhanced during the development process to add the top\_k records before and after reranking. Also displayed program generated vs gold standard program from data. 
 - Modular feature flags aid in testing experimental features without disrupting core functionality.
   - (e.g. feature flag for inclusion of Pinecone to the RAG pipeline)
-
----
-
-_Note: Throughout this project, I employed AI tools to streamline different phases. OpenAI o3 model assisted with early project scoping, requirement extraction, and documentation workflows. GPT-o4-mini-high was integrated via Windsurf IDE to accelerate iterative development and code review. All strategic decisions, testing, debugging, and architecture were led and verified by me to ensure quality and coherence._
-
-_Using these tools allowed me to move quickly without sacrificing depth. I was able to experiment with multiple architectural paths (page-based vs global search vs vector store) and evolve the pipeline over several iterations in just a few days. The assistants helped convert complex ideas into code faster, enabling me to focus more time on evaluation, metric design, and error analysis. They also supported test-driven development, automating repetitive tasks and generating scaffolding code like BM25 ranking utilities and DSL validators. The ability to offload boilerplate implementation work made space for deeper reasoning, rapid UI integration, and higher-level design decisions within time constraints._

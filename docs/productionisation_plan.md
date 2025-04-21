@@ -15,40 +15,35 @@
 
 ---
 
-## 3. Agile Development Roadmap
+## 3. Agile Development Roadmap (Revised)
 
-**Methodology:** Scrum (2-week sprints)
+**Methodology:** Scrum (2‑week sprints)
 
 ### Phase Breakdown
 
-| Phase                          | Sprint Count | Key Deliverables                                                                                  |
-| ------------------------------ | ------------ | ------------------------------------------------------------------------------------------------- |
-| Phase 1 – Discovery & Planning | 1 sprint     | Detailed technical specification, team onboarding, project charter                                |
-| Phase 2 – Architecture & Infra | 2 sprints    | Cloud infra setup, CI/CD pipelines, base RAG architecture in production code                      |
-| Phase 3 – Feature Development  | 4 sprints    | Retrieval, DSL planner, executor, metadata logging, evaluation, Streamlit-to-React UI port        |
-| Phase 4 – MLOps & Deployment   | 2 sprints    | Monitoring (W&B or Evidently), LLM fallbacks, retriever performance dashboards, prompt versioning |
-| Phase 5 – QA & Hardening       | 1 sprint     | Pen testing, load testing, data redaction, fallback robustness                                    |
-| Phase 6 – Pilot & Handover     | 1 sprint     | Documentation, training, observability dashboards, client onboarding                              |
+| Phase                              | Sprint Count | Key Deliverables                                                                                                  |
+| ---------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Phase 1 – Discovery & Planning     | **½ sprint** | Scope & SLAs locked, architecture sketch, backlog groomed                                                         |
+| Phase 2 – Architecture & Infra      | **1 sprint** | Supabase + pgvector setup, GitHub Actions CI/CD, baseline Terraform                                                |
+| Phase 3 – Feature Development       | **3 sprints** | • Hybrid retrieval SQL<br>• Planner prompt v2 with JSON retry<br>• DSL v2 executor with unit guard<br>• Minimal React UI |
+| Phase 4 – MLOps & Deployment        | **1 sprint** | Prometheus / Grafana monitoring, cost & latency dashboards, blue‑green rollout                                     |
+| Phase 5 – QA & Hardening           | **1 sprint** | Load‑ & fuzz‑tests @100 QPS, pen‑test fixes, prompt‑injection safeguards                                           |
+| Phase 6 – Pilot & Handover         | **½ sprint** | Runbooks, demo day, stakeholder training, final documentation                                                     |
 
-**Estimated Timeline:** 11 sprints = \~5.5 months\
-**Dev Cycle:** Bi-weekly demos, JIRA-managed tickets, Sprint Planning / Grooming / Retro cadence
+**Estimated Timeline:** **7 sprints ≈ 14 weeks (≈ 3½ months)**  
+**Dev Cycle:** Bi‑weekly demos, JIRA‑managed tickets, Sprint Planning / Grooming / Retro cadence
 
 ---
 
-## 4. Team Composition & Resource Plan
+## 4. Team Composition & Resource Plan 
 
-| Role                  | FTE | Duration     | Responsibility                                  |
-| --------------------- | --- | ------------ | ----------------------------------------------- |
-| Tech Lead / Architect | 1   | Full project | End-to-end design, code reviews, deployment     |
-| Backend Engineer      | 2   | Ph 2–5       | RAG pipeline, APIs, evaluation engine           |
-| Frontend Engineer     | 1   | Ph 3, 5      | UI/UX for QA tool and dashboard                 |
-| ML Engineer           | 1   | Ph 3–4       | Retrieval tuning, eval metrics, prompt crafting |
-| MLOps Engineer        | 1   | Ph 4–6       | CI/CD, monitoring, rollout infra                |
-| QA Engineer           | 0.5 | Ph 5–6       | Automated tests, security, load testing         |
-| PM / Scrum Master     | 0.5 | All          | Agile execution, stakeholder management         |
-
-**Optional:** UX Designer (contract) during UI planning\
-**Hosting:** AWS preferred (Lambda, ECS, DynamoDB, S3, CloudWatch) or GCP equivalent
+| Role                       | FTE | Duration      | Responsibility                                                    |
+| -------------------------- | --- | ------------- | ---------------------------------------------------------------- |
+| Tech Lead / Full‑stack Eng.| 1   | Full project  | End‑to‑end design, React UI, code reviews, infra decisions       |
+| ML / Backend Engineer      | 1   | Ph 2 – 5      | Retrieval layer, planner prompt, evaluation harness              |
+| Platform / MLOps Engineer  | 0.5 | Ph 2 – 6      | Cloud setup, CI/CD, monitoring, cost optimisation                |
+| QA / SecOps (Contract)     | 0.5 | Ph 5 – 6      | Automated load / pen / fuzz testing, security remediation        |
+| PM / Scrum Master          | 0.25| Full project  | Agile cadence, stakeholder alignment, risk tracking              |
 
 ---
 
@@ -120,9 +115,5 @@
   - Evaluation metrics, dashboards
   - DevOps SOP and support escalation paths
 
----
 
-## 9. Final Remarks
-
-This proposal reflects an industry-standard approach to delivering LLM-based intelligent systems for financial QA use cases. It emphasizes modular architecture, reproducibility, and evaluation-first design. With experienced resources and staged delivery, the FinRAG system can be confidently deployed in a live production environment within 6 months.
 
