@@ -37,16 +37,27 @@ def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, stri
 
     # Iterate through each conversation
     for conv_id, samples in conv_groups.items():
-        # Sort turns by turn index from id suffix
-        # Original logic assumed IDs like convID_turnIdx
-        # turns = sorted(samples, key=lambda s: int(s.get("id", "").rsplit("_",1)[1]))
-        # Corrected logic for IDs like someID-turnIdx
+        # --- START MODIFICATION: Robust Turn Sorting ---
+        def get_turn_index(sample_dict):
+            sample_id = sample_dict.get("id", "")
+            try:
+                # Try splitting by hyphen first (e.g., ...pdf-3 -> 3)
+                return int(sample_id.rsplit("-", 1)[-1])
+            except (ValueError, IndexError):
+                try:
+                    # Fallback: Try splitting by underscore (e.g., ..._3 -> 3)
+                    return int(sample_id.rsplit("_", 1)[-1])
+                except (ValueError, IndexError):
+                    # If both fail, log warning and return 0 for sorting
+                    warnings.warn(f"Could not parse turn index from ID '{sample_id}' for conv '{conv_id}'. Using default sort order 0.")
+                    return 0
+
         try:
-            turns = sorted(samples, key=lambda s: int(s.get("id", "").rsplit("-",1)[-1]))
-        except (ValueError, IndexError) as e:
-            # Handle cases where ID format might be unexpected or splitting fails
-            warnings.warn(f"Could not sort turns for conv_id '{conv_id}' due to ID format error: {e}. Processing in original order.")
-            turns = samples # Process in unsorted order if sorting fails
+            turns = sorted(samples, key=get_turn_index)
+        except Exception as sort_err: # Catch any unexpected sorting errors
+            warnings.warn(f"Sorting turns failed unexpectedly for conv '{conv_id}': {sort_err}. Processing in original order.")
+            turns = samples
+        # --- END MODIFICATION: Robust Turn Sorting ---
 
         chat_history: List[Tuple[str, str]] = []
         for sample in turns:

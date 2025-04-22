@@ -38,9 +38,9 @@ def answers_match(pred, gold):
         return str(pred) == str(gold) # Fallback to string comparison
 
 @st.cache_data
-def load_data(split="dev", max_entries: int | None = None): # Modified function signature
+def load_data(split="train", max_entries: int | None = None): # Modified function signature, default split to train
     """Loads data from the specified split, optionally limiting entries."""
-    path = os.path.join("data", f"{split}_turn.json")
+    path = os.path.join("data", f"{split}.json") # Use the actual filename format
     try:
         with open(path, 'r', encoding='utf-8') as f: # Added encoding
             loaded_data = json.load(f)
@@ -67,17 +67,21 @@ st.markdown("Ask a question based on financial reports (ConvFinQA dataset)")
 # --- Sidebar Configuration --- Added section ---
 st.sidebar.title("⚙️ Configuration")
 
-# Data Split Selection
-data_split = st.sidebar.selectbox(
-    "Select Data Split",
-    ("dev", "train", "test"), # Add other splits if available
-    index=0, # Default to 'dev'
-    help="Choose the dataset split to load."
-)
+# --- START MODIFICATION: Remove Data Split Selection ---
+# Remove the dropdown for selecting data split
+# data_split = st.sidebar.selectbox(
+#     "Select Data Split",
+#     ("dev", "train", "test"), 
+#     index=0, 
+#     help="Choose the dataset split to load."
+# )
+data_split = "train" # Hardcode to always use train split
+st.sidebar.info("Loading data from: data/train.json") # Inform user
+# --- END MODIFICATION ---
 
 # Add number input for max entries
 max_data_entries = st.sidebar.number_input(
-    f"Max Entries to Load from '{data_split}' (0=All)",
+    f"Max Entries to Load from '{data_split}' (0=All)", # Label still reflects the hardcoded split
     min_value=0,  # 0 means load all
     value=0,      # Default to loading all
     step=50,
@@ -86,11 +90,13 @@ max_data_entries = st.sidebar.number_input(
 
 # Use the value from number input (treat 0 as None for load_data)
 max_entries_to_load = max_data_entries if max_data_entries > 0 else None
-# Pass the selected split and limit to load_data
+# Pass the hardcoded split and limit to load_data
 data = load_data(split=data_split, max_entries=max_entries_to_load)
 
 if not data:
-    st.error(f"No data loaded from 'data/{data_split}_turn.json'. Check configuration or data file.")
+    # --- START MODIFICATION: Update Error Message Filename ---
+    st.error(f"No data loaded from 'data/{data_split}.json'. Check configuration or data file.")
+    # --- END MODIFICATION ---
     st.stop() # Stop execution if no data
 
 # Sample Selection Dropdown
@@ -184,10 +190,20 @@ with col1:
                 st.warning("No relevant evidence chunks found after reranking. The agent may not be able to answer.")
                 # Optionally stop here or let the agent try with no evidence
                 # st.stop()
+            
+            # --- START DEBUG: Show reranked chunks passed to agent ---
+            with st.expander("🐛 DEBUG: Reranked Chunks Input to Agent"):
+                 st.json(reranked_chunks)
+            # --- END DEBUG ---
 
             with st.spinner("Planning and executing..."):
                 result = plan_and_execute(question, reranked_chunks)
 
+            # --- START DEBUG: Show raw result from plan_and_execute ---
+            st.subheader("🐛 DEBUG: Raw Agent Result")
+            st.json(result)
+            # --- END DEBUG ---
+            
             # Display results
             st.subheader("📝 Generated Program")
             st.code(result.get("program", "N/A"), language="python") # Assume DSL is python-like

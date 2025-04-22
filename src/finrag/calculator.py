@@ -19,11 +19,14 @@ def multiply(a: Union[int, float], b: Union[int, float]) -> Union[int, float]:
 
 def divide(a: Union[int, float], b: Union[int, float]) -> float:
     if b == 0:
-        raise ValueError("Division by zero")
+        return float('nan')
     return a / b
 
 
 def format_percentage(value: float, decimals: int = 1) -> str:
+    if value != value:
+        return "Error: Invalid calculation (Div/0)"
+
     pct = value * 100
     # If percentage is a whole number, format without decimals
     if isinstance(pct, float) and pct.is_integer():
