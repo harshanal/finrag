@@ -16,6 +16,7 @@ python-dotenv = "^1.0.0"
 jsonlines = "^3.1.0"
 streamlit = "^1.30.0"
 pinecone = "^6.0.2"
+sentence-transformers = "^4.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"

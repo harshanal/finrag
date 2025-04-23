@@ -15,7 +15,7 @@ import logging
 import wandb
 # --- End W&B Import ---
 
-from finrag.agent import plan_and_execute, FUNCTION_NAME
+from finrag.agent import plan_and_execute
 from finrag.chunk_utils import build_candidate_chunks
 from finrag.retriever import retrieve_evidence
 
@@ -117,8 +117,8 @@ def evaluate_agent(data: List[Dict[str, Any]], use_retrieval: bool = False, stri
                 # Pass chat_history into planner for multi-turn context
                 result = plan_and_execute(question, evidence_chunks, chat_history)
                 tool = result.get("tool")
-                # count only valid tool calls
-                if tool == FUNCTION_NAME:
+                # count only valid tool calls - update to check for the new tool name
+                if tool == "python_eval":
                     tool_used += 1
                 answer = result.get("answer")
                 program = result.get("program")

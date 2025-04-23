@@ -10,8 +10,8 @@ import streamlit as st
 # Assuming these imports are correct based on your project structure
 try:
     # from finrag.chunk_utils import build_candidate_chunks # Not directly used in app.py itself
-    from finrag.retriever import retrieve_evidence
-    from finrag.agent import plan_and_execute
+from finrag.retriever import retrieve_evidence
+from finrag.agent import plan_and_execute
 except ImportError as e:
     st.error(f"Failed to import FinRAG modules: {e}. Ensure src is in PYTHONPATH.")
     st.stop()
@@ -122,8 +122,8 @@ questions_file = os.path.join("scripts", "upsert_questions.jsonl")
 quick_qs = []
 if os.path.isfile(questions_file):
     try:
-        with open(questions_file, "r", encoding="utf-8") as f:
-            quick_qs = [json.loads(line) for line in f]
+    with open(questions_file, "r", encoding="utf-8") as f:
+        quick_qs = [json.loads(line) for line in f]
     except Exception as e:
         st.sidebar.warning(f"Could not load quick questions: {e}")
 
@@ -150,16 +150,16 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Ask a Question")
-    question = st.text_area(
+question = st.text_area(
         "Enter your question here:",
-        key="question_input",
-        height=100,
+    key="question_input",
+    height=100,
         label_visibility="collapsed" # Hide the label above
-    )
+)
 
     if st.button("Run Analysis", use_container_width=True):
-        if not question:
-            st.error("Please enter a question.")
+    if not question:
+        st.error("Please enter a question.")
         elif not sample:
              st.error("No sample selected for retrieval (this shouldn't happen).")
         else:
@@ -172,7 +172,7 @@ with col1:
 
             with st.expander("🔎 Top Retrieved Chunks (Before Rerank)"):
                  if raw_chunks:
-                     for i, ch in enumerate(raw_chunks):
+                for i, ch in enumerate(raw_chunks):
                          st.markdown(f"**{i+1}.** `{ch.get('chunk_id', 'N/A')}`")
                          st.text(f"{ch.get('text', '')[:500]}...") # Show more text
                  else:
@@ -180,7 +180,7 @@ with col1:
 
             with st.expander("📊 Top Reranked Chunks (Used by LLM)"):
                  if reranked_chunks:
-                    for i, ch in enumerate(reranked_chunks):
+                for i, ch in enumerate(reranked_chunks):
                          st.markdown(f"**{i+1}.** `{ch.get('chunk_id', 'N/A')}` — Score: {ch.get('score', 0):.2f}")
                          st.text(f"{ch.get('text', '')[:500]}...") # Show more text
                  else:
