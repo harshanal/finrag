@@ -420,7 +420,10 @@ def extract_all_values_with_llm(
         }
     current_schema["parameters"]["required"] = list(current_schema["parameters"]["properties"].keys())
 
-    # --- Define System and User Prompts (Less Strict Version - More Explicit Value Format) ---
+    # --- Define System and User Prompts (Refined Again for Robustness) ---
+    # Format required items as a numbered list for potentially easier processing
+    numbered_items_list = "\n".join([f"{i+1}. {item}" for i, item in enumerate(required_items)])
+
     system_prompt = f"""\
 You are a highly accurate data extraction bot. Your task is to find the specific numerical values corresponding to ALL the requested financial items listed below, using ONLY the provided text and table evidence.
 
@@ -428,24 +431,25 @@ You are a highly accurate data extraction bot. Your task is to find the specific
 
 1.  Carefully review the entire `List of Items to Extract`.
 2.  Scan the `Relevant Evidence` provided.
-3.  For **EACH item** in the list, locate the **single exact numerical value** within the provided `Relevant Evidence` that matches the item description (metric name and year/period).
+3.  For **EACH item** in the list:
+    a.  Locate the **single exact numerical value** within the `Relevant Evidence` that matches the item description (metric name and year/period).
+    b.  **CRITICAL: Double-check the year!** Ensure the number you found corresponds precisely to the year specified in the item description.
+    c.  **Format the value:** Your primary goal is to return the *raw digits* of the number found. Remove any surrounding text, units (like million, billion, thousand), currency symbols ($, €, £), or percentage signs (%) *before* returning the value. For example, if you find "$1.3 million", return "1.3". If you find "75%", return "75". If you find "(500)", return "-500". Use strings for numbers that still contain formatting like commas after your initial cleanup (e.g., "1,234,567") or for negative numbers represented with parentheses.
 
 **Output Requirements:**
 
 *   **Format:** You MUST respond using the `{MULTI_VALUE_EXTRACTION_FUNCTION_NAME}` function call.
 *   **Arguments:** The function call arguments MUST be a JSON object containing **a key for EVERY item** listed in the `List of Items to Extract`.
 *   **Values:**
-    *   For each key (item), the value should be the extracted numerical value **represented as a string or number**. 
-    *   **CRITICAL:** Your primary goal is to return the *raw digits* of the number found. Remove any surrounding text, units (like million, billion, thousand), currency symbols ($, €, £), or percentage signs (%) *before* returning the value. For example, if you find "$1.3 million", return "1.3". If you find "75%", return "75". If you find "(500)", return "-500". Use strings for numbers that still contain formatting like commas after your initial cleanup (e.g., "1,234,567") or for negative numbers represented with parentheses. 
+    *   For each key (item description), the value should be the carefully extracted and cleaned numerical value (as a string or number) according to the formatting rules above.
     *   If a specific item's value is explicitly stated as not applicable or zero **in the provided evidence**, use the string "N/A" or the number 0 as the value for that item's key.
-    *   If you **cannot confidently locate** a specific item's value **within the provided evidence**, use the string "N/A" or null as the value for that item's key.
+    *   If you **cannot confidently locate** a specific item's value **within the provided evidence** (even after careful searching and year-checking), use the string "N/A" or null as the value for that item's key.
     *   **You MUST provide a value (cleaned numeric string, number 0, "N/A", or null) for every requested item.**
 *   **Strictness:** Output ONLY the function call JSON. No explanations.
 """
+    # Use the numbered list in the user prompt
     user_prompt = f"""List of Items to Extract:
-```json
-{json.dumps(required_items, indent=2)}
-```
+{numbered_items_list}
 --- 
 Relevant Evidence:
 ```
