@@ -356,7 +356,7 @@ Relevant Evidence:
 MULTI_VALUE_EXTRACTION_FUNCTION_NAME = "report_extracted_values"
 MULTI_VALUE_EXTRACTION_BASE_SCHEMA = {
     "name": MULTI_VALUE_EXTRACTION_FUNCTION_NAME,
-    "description": "Reports the numerical values found in the evidence for multiple specified items.",
+    "description": "Reports the fully scaled numerical values found in the evidence for multiple specified items.",
     "parameters": {
         "type": "object",
         "properties": {}, # Populated dynamically
@@ -367,13 +367,13 @@ MULTI_VALUE_EXTRACTION_BASE_SCHEMA = {
 def extract_all_values_with_llm(
     required_items: List[str],
     evidence_chunks: List[Dict[str, str]]
-) -> Tuple[Dict[str, float | int | str], List[str]]: # Return value can be string (e.g., "N/A")
+) -> Tuple[Dict[str, float | int | None], List[str]]: # Return value is now number or None
     """
-    Uses a single LLM function call to extract ALL required numerical values.
-    Uses the reverted "less strict" prompt allowing strings like "N/A".
+    Uses a single LLM function call to extract ALL required numerical values, applying unit scaling.
+    Returns fully scaled numbers (e.g., millions applied, percentages as decimals) or None.
     """
-    logger.info(f"Attempting LLM multi-extraction for: {required_items}")
-    found_values_raw = {} # Store raw extracted values (can be number, string "N/A", null)
+    logger.info(f"Attempting LLM multi-extraction with scaling for: {required_items}")
+    found_values_scaled = {} # Store scaled numeric values or None
     errors = []
 
     if not required_items:
@@ -381,13 +381,13 @@ def extract_all_values_with_llm(
         return {}, []
 
     # --- Prepare Evidence (Top N Chunks) ---
-    MAX_CHUNKS_FOR_PROMPT = 7 
+    MAX_CHUNKS_FOR_PROMPT = 7
     top_evidence = evidence_chunks[:MAX_CHUNKS_FOR_PROMPT]
     if not top_evidence:
         logger.error(f"No evidence chunks provided for multi-extraction.")
         return {}, [f"No evidence provided to find '{item}'" for item in required_items]
 
-    # Pre-process evidence text
+    # Pre-process evidence text (same as before)
     processed_chunks_for_prompt = []
     for i, chunk in enumerate(top_evidence):
         chunk_id = chunk.get("chunk_id", f"unknown_{i}")
@@ -409,59 +409,66 @@ def extract_all_values_with_llm(
         processed_chunks_for_prompt.append(prompt_text)
     evidence_text_for_prompt = "\\n".join(processed_chunks_for_prompt)
 
-    # --- Dynamically Create Function Schema --- 
+    # --- Dynamically Create Function Schema (Updated for number/null) ---
     current_schema = MULTI_VALUE_EXTRACTION_BASE_SCHEMA.copy()
     current_schema["parameters"] = current_schema["parameters"].copy()
     current_schema["parameters"]["properties"] = {}
     for item in required_items:
-        prop_key = item 
+        prop_key = item
         current_schema["parameters"]["properties"][prop_key] = {
-            "type": ["string", "number", "null"],
-            "description": f"The extracted numerical value for '{item}'. Use string for numbers with commas/parens/etc. Use null or 'N/A' if not found in evidence."
+            "type": ["number", "null"], # Expect scaled number or null
+            "description": f"The fully scaled numerical value for '{item}'. Apply units (millions, %, etc.) found in context. Use null if not found."
         }
-    current_schema["parameters"]["required"] = list(current_schema["parameters"]["properties"].keys())
+    # Requirement implicitly handled by requesting null for missing values
+    # current_schema["parameters"]["required"] = list(current_schema["parameters"]["properties"].keys()) # Optional: can keep if strictness needed
 
-    # --- Define System and User Prompts (Refined Again with Examples) ---
-    # Format required items as a numbered list for potentially easier processing
-    numbered_items_list = "\n".join([f"{i+1}. {item}" for i, item in enumerate(required_items)])
+    # --- Define System and User Prompts (Updated for Scaling) ---
+    numbered_items_list = "\\n".join([f"{i+1}. {item}" for i, item in enumerate(required_items)])
 
     system_prompt = f"""\
-You are a highly accurate data extraction bot. Your task is to find the specific numerical values corresponding to ALL the requested financial items listed below, using ONLY the provided text and table evidence.
+You are a highly accurate data extraction bot. Your task is to find the specific numerical values corresponding to ALL the requested financial items listed below, apply any relevant unit scaling (millions, thousands, billions, percentages), and return the final numeric value using ONLY the provided text and table evidence.
 
 **Your Task:**
 
 1.  Carefully review the entire `List of Items to Extract`.
-2.  Scan the `Relevant Evidence` provided.
+2.  Scan the `Relevant Evidence` provided (text and tables).
 3.  For **EACH item** in the list:
     a.  Locate the **single exact numerical value** within the `Relevant Evidence` that matches the item description (metric name and year/period).
-    b.  **CRITICAL: Double-check the year!** Ensure the number you found corresponds precisely to the year specified in the item description.
-    c.  **Format the value:** Return the raw numerical digits found. 
-        *   Remove any surrounding text, units (like million, billion, thousand), currency symbols ($, €, £), or percentage signs (%) found *next to* the number itself. 
-        *   **Focus on the digits:** Extract the number exactly as it appears *before* considering units often mentioned elsewhere (like table headers). 
-        *   Use strings for numbers that still contain formatting like commas (e.g., "1,234,567") or parentheses for negatives (e.g., "(500)" -> "-500").
+    b.  **CRITICAL: Double-check the year!** Ensure the number corresponds precisely to the year specified.
+    c.  **Identify and Apply Units/Scaling:**
+        *   Look for units mentioned near the number, in table headers/footnotes, or surrounding text (e.g., "in millions", "thousands", "billions", "%").
+        *   **Apply the scaling:**
+            *   "millions": Multiply the found number by 1,000,000.
+            *   "thousands": Multiply by 1,000.
+            *   "billions": Multiply by 1,000,000,000.
+            *   "%": Divide the found number by 100 (e.g., 75% becomes 0.75).
+        *   Handle negative numbers indicated by parentheses, e.g., (500) becomes -500 *before* scaling.
+        *   Remove commas before scaling (e.g., "1,234 million" -> 1234 * 1,000,000 = 1,234,000,000).
+    d.  **NEGATIVE CONSTRAINT:** DO NOT extract values mentioned *only* in descriptions of change or difference (e.g., if text says "revenue increased by $302 million", do NOT extract 302,000,000 if you are looking for "Revenue 2017". Find the actual reported value for "Revenue 2017" and scale it).
+    e.  Return the final, fully scaled numeric value.
 
-**Examples of Correct Formatting:**
-*   Text says "revenue was $1.3 million": Return `"1.3"`
-*   Text says "growth of 75%": Return `"75"`
-*   Text says "loss of (500)": Return `"-500"`
-*   Table cell contains `1,234,567`: Return `"1,234,567"`
-*   Table header says "(in thousands)" and cell has `214.1`: Return `"214.1"` (Do NOT multiply by 1000 here)
+**Examples of Correct Scaling & Formatting:**
+*   Text says "revenue was $1.3 million": Return `1300000`
+*   Text says "growth of 75%": Return `0.75`
+*   Text says "loss of (500) thousands": Return `-500000`
+*   Table header says "(in millions)" and cell has `1,234.5`: Return `1234500000`
+*   Text says "tax rate 25%": Return `0.25`
 
 **Output Requirements:**
 
 *   **Format:** You MUST respond using the `{MULTI_VALUE_EXTRACTION_FUNCTION_NAME}` function call.
 *   **Arguments:** The function call arguments MUST be a JSON object containing **a key for EVERY item** listed in the `List of Items to Extract`.
 *   **Values:**
-    *   For each key (item description), the value should be the carefully extracted and cleaned numerical value (as a string or number) according to the formatting rules and examples above.
-    *   If a specific item's value is explicitly stated as not applicable or zero **in the provided evidence**, use the string "N/A" or the number 0 as the value for that item's key.
-    *   If you **cannot confidently locate** a specific item's value **within the provided evidence** (even after careful searching and year-checking), use the string "N/A" or null as the value for that item's key.
-    *   **You MUST provide a value (cleaned numeric string, number 0, "N/A", or null) for every requested item.**
+    *   For each key (item description), the value should be the fully scaled **numeric value** (number type in JSON) after applying units/scaling as described above.
+    *   If a specific item's value is explicitly stated as zero **in the provided evidence**, use the number `0`.
+    *   If you **cannot confidently locate** a specific item's value **within the provided evidence** (even after careful searching, year-checking, and checking for units), use `null` as the value for that item's key.
+    *   **You MUST provide a value (`number` or `null`) for every requested item.**
 *   **Strictness:** Output ONLY the function call JSON. No explanations.
 """
     # Use the numbered list in the user prompt
     user_prompt = f"""List of Items to Extract:
 {numbered_items_list}
---- 
+---
 Relevant Evidence:
 ```
 {evidence_text_for_prompt}
@@ -472,19 +479,17 @@ Relevant Evidence:
         {"role": "user", "content": user_prompt}
     ]
 
-    # --- API Call --- 
+    # --- API Call ---
     try:
         # Using default extraction model (gpt-4o-mini unless overridden)
         model_name = os.getenv("OPENAI_CHAT_MODEL_EXTRACTION", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
-        # --- Experiment: Use Stronger Model for Extraction --- 
-        # model_name = os.getenv("OPENAI_CHAT_MODEL_SMART", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o")) # REVERTED
-        logger.info(f"Using OpenAI model: {model_name} for multi-value extraction of {len(required_items)} items.")
+        logger.info(f"Using OpenAI model: {model_name} for multi-value extraction (with scaling) of {len(required_items)} items.")
         response = openai.ChatCompletion.create(
             model=model_name,
             messages=messages,
             temperature=0,
-            max_tokens=max(500, 100 + len(required_items) * 50), 
-            functions=[current_schema], 
+            max_tokens=max(500, 100 + len(required_items) * 50),
+            functions=[current_schema],
             function_call={"name": MULTI_VALUE_EXTRACTION_FUNCTION_NAME}
         )
 
@@ -495,22 +500,24 @@ Relevant Evidence:
                 try:
                     args_str = func_call.get("arguments", "{}")
                     extracted_args = json.loads(args_str)
-                    logger.info(f"LLM returned extracted arguments: {extracted_args}")
+                    logger.info(f"LLM returned extracted & scaled arguments: {extracted_args}")
 
-                    # Store raw results, including potential "N/A" strings or null
+                    # Store scaled results (number or None)
                     for item in required_items:
-                        found_values_raw[item] = extracted_args.get(item) 
-                        # Check if value is None or "N/A" and log appropriate message
-                        if found_values_raw[item] is None:
-                            logger.warning(f"Value for '{item}' was null.")
-                            errors.append(f"Value not found in evidence for: '{item}'")
-                        elif isinstance(found_values_raw[item], str) and str(found_values_raw[item]).strip().upper() == "N/A":
-                            logger.warning(f"Value for '{item}' was 'N/A'.")
-                            errors.append(f"Value not found in evidence for: '{item}'")
+                        value = extracted_args.get(item) # Should be number or null
+                        if value is None:
+                            logger.warning(f"Value for '{item}' was null (not found or couldn't be scaled).")
+                            found_values_scaled[item] = None
+                            errors.append(f"Value not found or invalid for: '{item}'")
+                        elif isinstance(value, (int, float)):
+                            found_values_scaled[item] = value
+                            logger.debug(f"Scaled value found for '{item}': {value}")
                         else:
-                             logger.debug(f"Raw value found for '{item}': '{found_values_raw[item]}'")
-                             # Cleaning happens later in plan_and_execute during substitution
-                            
+                             # Should not happen if LLM follows instructions
+                             logger.error(f"LLM returned non-numeric/non-null value for '{item}': {value} (Type: {type(value)})")
+                             found_values_scaled[item] = None
+                             errors.append(f"Invalid type returned for '{item}': {type(value)}")
+
                 except json.JSONDecodeError:
                     logger.error(f"Failed to decode arguments JSON for multi-value extraction: {args_str}")
                     errors.extend([f"LLM returned invalid JSON for '{item}'" for item in required_items])
@@ -529,11 +536,11 @@ Relevant Evidence:
         errors.extend([f"Unexpected error extracting '{item}'" for item in required_items])
 
     # Final check: If no values were found at all, report errors for all items
-    if not found_values_raw and not errors:
+    if not found_values_scaled and not errors:
          errors.extend([f"Extraction failed for '{item}' (no response)" for item in required_items])
-        
-    # Return the dictionary potentially containing numbers, strings ("N/A"), or None
-    return found_values_raw, errors
+
+    # Return the dictionary containing numbers or None
+    return found_values_scaled, errors
 
 # --- Orchestration Function ---
 
@@ -543,13 +550,13 @@ def plan_and_execute(
     chat_history: Optional[List[Tuple[str, str]]] = None, # Chat history kept for potential future use
 ) -> Dict[str, Any]:
     """Orchestrates the agent process: specify_and_express -> extract_all -> substitute_and_eval -> format."""
-    
-    # --- Log Received Evidence --- 
+
+    # --- Log Received Evidence ---
     if evidence_chunks:
         logger.info(f"--- Evidence Received by Agent (Top {len(evidence_chunks)}) ---")
         for i, chunk in enumerate(evidence_chunks):
             chunk_id = chunk.get("chunk_id", f"unknown_{i}")
-            text_preview = chunk.get("text", "").replace("\n", " ")[:150]
+            text_preview = chunk.get("text", "").replace("\\n", " ")[:150]
             score = chunk.get("score", None)
             score_str = f" (Score: {score:.4f})" if score is not None else ""
             logger.info(f"[{i+1}] ID: {chunk_id}{score_str} | Text: {text_preview}...")
@@ -557,54 +564,53 @@ def plan_and_execute(
     else:
         logger.warning("Agent received no evidence chunks.")
 
-    # --- Step 1: Specify Requirements and Generate Expression Template (Combined) --- 
+    # --- Step 1: Specify Requirements and Generate Expression Template (Combined) ---
     logger.info(f"Step 1: Specifying requirements and generating expression template for question: '{question[:50]}...'")
     combined_spec = specify_and_generate_expression(question, evidence_chunks)
-    
-    if not combined_spec: 
+
+    if not combined_spec:
         logger.error("Failed to get valid specification and expression template from LLM.")
         return {
             "answer": "Error: Could not determine calculation requirements or expression.",
-            "program": "specify_or_express_failed", 
+            "program": "specify_or_express_failed",
             "intermediates": [],
-            "tool": "none", 
+            "tool": "none",
             "evidence": [chunk.get("chunk_id", "unknown") for chunk in evidence_chunks] if evidence_chunks else [],
         }
-        
-    # calculation_type kept for potential future use, but not used for formatting now
-    calculation_type = combined_spec.get('calculation_type', 'other') 
+
+    calculation_type = combined_spec.get('calculation_type', 'other')
     required_items_map = combined_spec.get('required_items_map', {})
     python_expression_template = combined_spec.get('python_expression_template')
-    output_format = combined_spec.get('output_format', 'number') # Use the new format flag
-    
+    output_format = combined_spec.get('output_format', 'number')
+
     required_item_descriptions = list(required_items_map.values())
     if not required_item_descriptions:
          logger.error(f"No required items identified in map: {required_items_map}")
-         return { 
+         return {
              "answer": "Error: No required items identified for calculation.",
              "program": "specify_or_express_failed",
              "intermediates": [combined_spec],
              "tool": "none",
              "evidence": [chunk.get("chunk_id", "unknown") for chunk in evidence_chunks] if evidence_chunks else [],
          }
-         
+
     logger.info(f"Step 1 successful. Type: {calculation_type}, Format: {output_format}, Template: {python_expression_template}, Required Items: {required_item_descriptions}")
 
-    # --- Step 2: Extract ALL Values using SINGLE LLM Call --- 
-    logger.info(f"Step 2: Extracting {len(required_item_descriptions)} required values via single LLM call...")
-    found_values_raw, extraction_errors = extract_all_values_with_llm(required_item_descriptions, evidence_chunks) 
-            
-    # Note: We proceed even if there are extraction errors, substitution step will handle missing values.
+    # --- Step 2: Extract ALL Values using SINGLE LLM Call (with SCALING) ---
+    logger.info(f"Step 2: Extracting and scaling {len(required_item_descriptions)} required values via single LLM call...")
+    # found_values_raw changed to found_values_scaled
+    found_values_scaled, extraction_errors = extract_all_values_with_llm(required_item_descriptions, evidence_chunks)
+
     if extraction_errors:
         logger.warning(f"Extraction step reported errors (may be partial): {extraction_errors}")
-             
-    logger.info(f"Step 2 finished. Raw extracted values: {found_values_raw}")
 
-    # --- Step 3: Substitute Values into Expression Template --- 
-    logger.info("Step 3: Substituting extracted values into expression template...")
-    placeholder_to_value_map = {} # Map placeholder (e.g., VAL_1) to cleaned numeric value
+    logger.info(f"Step 2 finished. Scaled extracted values: {found_values_scaled}")
+
+    # --- Step 3: Substitute Values into Expression Template ---
+    logger.info("Step 3: Substituting extracted & scaled values into expression template...")
+    placeholder_to_value_map = {} # Map placeholder (e.g., VAL_1) to scaled numeric value or None
     substitution_errors = []
-    
+
     # Sort placeholders (VAL_1, VAL_2...) for consistent processing
     sorted_placeholders = sorted(required_items_map.keys(), key=lambda x: int(x.split('_')[1]))
 
@@ -612,84 +618,81 @@ def plan_and_execute(
         description = required_items_map.get(placeholder)
         if not description:
              logger.error(f"Internal Error: Placeholder {placeholder} has no description in map.")
-             substitution_errors.append(f"Internal error mapping {placeholder}") 
-             continue 
+             substitution_errors.append(f"Internal error mapping {placeholder}")
+             continue
 
-        raw_extracted_value = found_values_raw.get(description)
-        
-        # Check if value is missing (None) or explicitly "N/A"
-        if raw_extracted_value is None or (isinstance(raw_extracted_value, str) and str(raw_extracted_value).strip().upper() == "N/A"):
-            logger.warning(f"Value for item '{description}' (placeholder {placeholder}) was not extracted or is N/A.")
+        # Use the scaled value directly (should be number or None)
+        scaled_value = found_values_scaled.get(description)
+
+        # Check if value is missing (None)
+        if scaled_value is None:
+            logger.warning(f"Value for item '{description}' (placeholder {placeholder}) was not extracted/scaled or is null.")
             substitution_errors.append(f"Missing value for {placeholder} ('{description}')")
-            continue # Skip this placeholder, fail later if template requires it
+            # Don't add to map, fail later if template requires it
+            continue
+        elif isinstance(scaled_value, (int, float)):
+             placeholder_to_value_map[placeholder] = scaled_value
+             logger.debug(f"Mapped {placeholder} ('{description}') to scaled value {scaled_value}")
+        else:
+            # Should not happen if extract_all_values_with_llm works correctly
+            logger.error(f"Unexpected non-numeric type for scaled value of '{description}' ({placeholder}): {type(scaled_value)}")
+            substitution_errors.append(f"Invalid scaled value type for {placeholder}")
+            continue
 
-        # Clean the extracted value 
-        try:
-            cleaned_value_str = clean_numeric_string(str(raw_extracted_value))
-            if cleaned_value_str:
-                 numeric_value = float(cleaned_value_str) if '.' in cleaned_value_str else int(cleaned_value_str)
-                 placeholder_to_value_map[placeholder] = numeric_value
-                 logger.debug(f"Mapped {placeholder} ('{description}') to {numeric_value} (Raw: '{raw_extracted_value}')")
-            else:
-                # clean_numeric_string resulted in empty string
-                logger.error(f"Cleaning raw value '{raw_extracted_value}' for '{description}' ({placeholder}) resulted in empty string.")
-                substitution_errors.append(f"Failed to clean value for {placeholder} ('{raw_extracted_value}')")
-        except ValueError as clean_err:
-            logger.error(f"Could not convert cleaned value '{cleaned_value_str}' for '{description}' ({placeholder}) to number. Raw: '{raw_extracted_value}'. Error: {clean_err}")
-            substitution_errors.append(f"Invalid numeric value for {placeholder} ('{raw_extracted_value}')")
-
-    # --- Fail Fast if Required Values are Missing for the Template --- 
+    # --- Fail Fast if Required Values are Missing for the Template ---
     placeholders_in_template = set(re.findall(r'VAL_\d+', python_expression_template))
     missing_placeholders_in_template = []
     for ph in placeholders_in_template:
         if ph not in placeholder_to_value_map:
             missing_desc = required_items_map.get(ph, "Unknown Item")
             missing_placeholders_in_template.append(f"{ph} ('{missing_desc}')")
-            
+
     if missing_placeholders_in_template:
          all_errors = substitution_errors + [f"Missing required value for {ph_desc}" for ph_desc in missing_placeholders_in_template]
-         error_message = "; ".join(sorted(list(set(all_errors)))) 
+         error_message = "; ".join(sorted(list(set(all_errors))))
          logger.error(f"Cannot substitute values for template '{python_expression_template}' due to missing required values: {error_message}")
          return {
              "answer": f"Error preparing calculation: {error_message}",
              "program": "substitute_failed",
-             "intermediates": [combined_spec, found_values_raw], # Show raw extracted values
+             "intermediates": [combined_spec, found_values_scaled], # Show scaled extracted values
              "tool": "none",
              "evidence": [chunk.get("chunk_id", "unknown") for chunk in evidence_chunks] if evidence_chunks else [],
          }
-    # --- End Fail Fast --- 
+    # --- End Fail Fast ---
 
-    # Perform the substitution 
-    final_expression_string = python_expression_template 
-    try: 
+    # Perform the substitution
+    final_expression_string = python_expression_template
+    try:
         def replace_placeholder(match):
              placeholder = match.group(0)
-             return str(placeholder_to_value_map[placeholder]) 
-             
+             # Ensure the value from the map is used directly
+             value = placeholder_to_value_map[placeholder]
+             return str(value) # Convert number to string for substitution
+
         final_expression_string = re.sub(r'VAL_\d+', replace_placeholder, final_expression_string)
         logger.info(f"Step 3 successful. Final expression for eval: {final_expression_string}")
-        
+
     except Exception as sub_err:
          logger.error(f"Unexpected error during value substitution: {sub_err}", exc_info=True)
          return {
              "answer": f"Error during calculation preparation: {sub_err}",
              "program": "substitute_failed",
-             "intermediates": [combined_spec, found_values_raw, {"template": python_expression_template}],
+             "intermediates": [combined_spec, found_values_scaled, {"template": python_expression_template}],
              "tool": "none",
              "evidence": [chunk.get("chunk_id", "unknown") for chunk in evidence_chunks] if evidence_chunks else [],
          }
 
-    # --- Step 4: Execute Python Expression using safe eval() --- 
+    # --- Step 4: Execute Python Expression using safe eval() ---
     logger.info(f"Step 4: Executing expression: {final_expression_string}")
     final_answer_val = None
     error_message = ""
-    
+
     safe_globals = {"__builtins__": None, 'abs': abs, 'pow': pow, 'round': round}
-    safe_locals = {} 
+    safe_locals = {}
 
     try:
         final_answer_val = eval(final_expression_string, safe_globals, safe_locals)
-        
+
         if not isinstance(final_answer_val, (int, float)):
              logger.warning(f"Eval result was not a number: {type(final_answer_val)} - {final_answer_val}")
              try:
@@ -697,7 +700,7 @@ def plan_and_execute(
              except (ValueError, TypeError):
                  error_message = f"Error: Calculation result '{final_answer_val}' is not a valid number."
                  final_answer_val = None
-                 
+
     except SyntaxError as e:
         error_message = f"Error: Invalid calculation syntax ({e}) in '{final_expression_string}'."
         logger.error(error_message)
@@ -716,44 +719,60 @@ def plan_and_execute(
 
     if final_answer_val is None:
         return {
-            "answer": error_message, 
-            "program": "eval_failed", 
-            "intermediates": [combined_spec, found_values_raw, {"substituted_expression": final_expression_string}], 
-            "tool": "python_eval", 
+            "answer": error_message,
+            "program": "eval_failed",
+            "intermediates": [combined_spec, found_values_scaled, {"substituted_expression": final_expression_string}],
+            "tool": "python_eval",
             "evidence": [chunk.get("chunk_id", "unknown") for chunk in evidence_chunks] if evidence_chunks else [],
         }
 
-    # --- Step 5: Format Final Answer (Using output_format flag) --- 
+    # --- Step 5: Format Final Answer (Using output_format flag) ---
+
+    # --- START: Output Format Override Check (No longer needed if scaling is done correctly in Step 2) ---
+    # Keeping this commented out for now, as Step 2 should handle % -> decimal conversion.
+    # inputs_were_percentages = False
+    # if calculation_type in ['average', 'sum', 'difference']:
+    #     if any('%' in desc for desc in required_item_descriptions): # This check might be less reliable now
+    #         inputs_were_percentages = True
+    #         logger.info(f"Detected calculation ('{calculation_type}') on percentage inputs. Forcing output format to 'number'. Original: '{output_format}'")
+    #         output_format = 'number' # Override!
+    # --- END: Output Format Override Check ---
+
     final_answer_str = ""
-    logger.info(f"Formatting result: {final_answer_val} based on output_format: {output_format}")
-    
-    # No scaling logic here anymore. Formatting depends only on output_format.
+    logger.info(f"Formatting result: {final_answer_val} based on final output_format: {output_format}")
+
+    # Formatting depends only on output_format.
     try:
         if output_format == 'percent':
-            final_answer_str = f"{final_answer_val:.1%}" 
+            # Assuming final_answer_val is already a ratio (e.g., 0.086 for 8.6%)
+            final_answer_str = f"{final_answer_val:.1%}"
             logger.info(f"Formatted percentage answer: {final_answer_str}")
-        
+
         elif isinstance(final_answer_val, (int, float)):
              if isinstance(final_answer_val, float):
-                  final_answer_str = f"{final_answer_val:.2f}" 
-             else: 
-                  final_answer_str = str(final_answer_val) 
+                  # Check for "integer floats" like 62.0 - format as int
+                  if final_answer_val == int(final_answer_val):
+                      final_answer_str = str(int(final_answer_val))
+                  else:
+                      final_answer_str = f"{final_answer_val:.2f}"
+             else:
+                  final_answer_str = str(final_answer_val)
              logger.info(f"Formatted number answer: {final_answer_str}")
         else:
              logger.warning(f"Unexpected answer type before formatting: {type(final_answer_val)}")
              final_answer_str = str(final_answer_val)
-                 
+
     except Exception as format_err:
         logger.error(f"Error formatting final answer '{final_answer_val}' (output_format: {output_format}): {format_err}", exc_info=True)
-        final_answer_str = f"Error formatting result: {final_answer_val}" # Return raw value 
+        final_answer_str = f"Error formatting result: {final_answer_val}"
 
     logger.info(f"Step 4 & 5 successful. Final formatted answer: {final_answer_str}")
 
-    # --- Step 6: Return Result --- 
+    # --- Step 6: Return Result ---
     return {
-        "answer": final_answer_str, 
+        "answer": final_answer_str,
         "program": python_expression_template, # Store the template
-        "intermediates": [combined_spec, found_values_raw, {"substituted_expression": final_expression_string}], 
-        "tool": "python_eval", 
+        "intermediates": [combined_spec, found_values_scaled, {"substituted_expression": final_expression_string}],
+        "tool": "python_eval",
         "evidence": [chunk.get("chunk_id", "unknown") for chunk in evidence_chunks] if evidence_chunks else [],
     }
