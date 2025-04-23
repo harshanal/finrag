@@ -3,17 +3,22 @@
 # FinRAG Retrieval Module (retriever.py)
 #
 # This module implements the "retrieval" stage of the RAG pipeline:
-# 1. It loads environment flags (USE_PINECONE) and initializes Pinecone client.
-# 2. pinecone_retrieve(query, top_k): uses stored vector embeddings to find top-k
-#    relevant chunks via cosine similarity.
-# 3. BM25Okapi: a pure-Python fallback retrieval algorithm that ranks text chunks
-#    by term-frequency/inverse-document-frequency scores.
-# 4. Hybrid retrieve_evidence(turn, question): orchestrates retrieval:
-#    a. If USE_PINECONE=True, calls pinecone_retrieve; logs & falls back if empty.
-#    b. If no Pinecone results or disabled, tokenizes candidate chunks and uses
-#       BM25Okapi to select top-bm25_k chunks.
-#    c. If raw chunks found, reranks with Cohere reranking API to refine top-k.
-#    d. Returns dict with 'raw_chunks' and 'reranked_chunks' ready for LLM.
+# 1. Initialises a ChromaDB client for vector retrieval.
+# 2. chromadb_retrieve(query, top_k, doc_id=None): uses stored vector embeddings
+#    in ChromaDB to find top-k relevant chunks via similarity search. Can optionally
+#    filter by document ID ('source_filename' metadata).
+# 3. BM25Okapi: a pure-Python sparse retrieval algorithm (fallback).
+# 4. retrieve_evidence(turn, question): orchestrates retrieval:
+#    a. Attempts retrieval using chromadb_retrieve. If a non-empty 'turn' dict
+#       is provided, it extracts 'filename' to filter the ChromaDB search to
+#       that document. If 'turn' is empty, performs a global search.
+#    b. If ChromaDB fails or returns no results AND if 'turn' data is available,
+#       builds candidate chunks from the 'turn' and uses BM25Okapi as a fallback
+#       to select top-bm25_k chunks.
+#    c. If raw chunks are found (from either ChromaDB or BM25), reranks them
+#       using the Cohere Rerank API to refine the top-k most relevant chunks.
+#    d. Returns a dict with 'raw_chunks' (initial candidates) and 'reranked_chunks'
+#       (after Cohere reranking) ready for the agent.
 ########################################################################
 """
 
@@ -24,9 +29,6 @@ import math
 import os
 from typing import Any, Dict, List
 
-# Remove Pinecone import
-# from pinecone import Pinecone
-# Add ChromaDB import
 import chromadb
 
 from finrag.chunk_utils import build_candidate_chunks
@@ -39,9 +41,6 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 
 load_dotenv(override=True)  # Override existing env vars from .env
-# print(
-#     f\" [DEBUG] PINECONE_API_KEY prefix: {os.getenv('PINECONE_API_KEY')[:5] if os.getenv('PINECONE_API_KEY') else 'None'}\"
-# ) # No longer needed
 
 # --- ChromaDB Initialization ---
 CHROMA_DB_PATH = "./chroma_db_mpnet" # Path relative to project root where DB is stored
@@ -126,10 +125,6 @@ class BM25Okapi:
                         scores[i] += numerator / denominator
         return scores
 
-# --- Replace pinecone_retrieve with chromadb_retrieve ---
-# def pinecone_retrieve(query: str, top_k: int = 20, doc_id: str | None = None) -> List[Dict[str, Any]]:
-#     ... (removed old Pinecone function) ...
-
 def chromadb_retrieve(query: str, top_k: int = 20, doc_id: str | None = None) -> List[Dict[str, Any]]:
     """Retrieve similar chunks from ChromaDB collection, optionally filtering by doc_id.
     Uses 'source_filename' metadata key for filtering.
@@ -196,10 +191,10 @@ def chromadb_retrieve(query: str, top_k: int = 20, doc_id: str | None = None) ->
 def retrieve_evidence(
     turn: Dict[str, Any], question: str, top_k: int = 8, bm25_k: int = 50
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """Hybrid retrieval: ChromaDB / BM25 + Cohere reranking."""
+    """Hybrid retrieval (multistage): ChromaDB / BM25 + Cohere reranking."""
     # --- START CONFIGURATION ---
     # Increase the number of candidates fetched initially from ChromaDB
-    chromadb_query_top_k = 50 # Similar to previous Pinecone logic
+    chromadb_query_top_k = 50 
     # --- END CONFIGURATION ---
 
     # Gold-index fallback for dev set: use annotated chunks directly
@@ -229,7 +224,7 @@ def retrieve_evidence(
     if CHROMA_COLLECTION: # Check if collection loaded successfully
         try:
             logger.debug(f"Attempting ChromaDB retrieval for query: {question[:50]}... DocID: {doc_id_to_filter}, Requesting Top K: {chromadb_query_top_k}")
-            # Use chromadb_retrieve instead of pinecone_retrieve
+            # Use chromadb_retrieve
             raw_chunks = chromadb_retrieve(question, chromadb_query_top_k, doc_id=doc_id_to_filter) 
             
             if not raw_chunks:
@@ -281,7 +276,7 @@ def retrieve_evidence(
             model="rerank-english-v2.0",
             query=question,
             documents=docs,
-            top_n=final_top_k, # Use the increased K
+            top_n=final_top_k, 
         )
         reranked_chunks = [
             {

@@ -2,24 +2,28 @@
 ########################################################################
 # FinRAG Agent Module (agent.py)
 #
-# This module implements the "planning and execution" stage of the RAG pipeline:
-# 1. It accepts reranked evidence chunks and a user question.
-# 2. It formats the evidence into prompts for the LLM's function-calling API.
-# 3. generate_tool_call() constructs and validates a DSL program that computes
-#    the answer by invoking the math tool.
-# 4. plan_and_execute() orchestrates the tool call: it invokes generate_tool_call(),
-#    executes the returned DSL via run_math_tool(), captures intermediate values,
-#    formats the final answer, and returns a structured dict containing:
-#    - program: the DSL string
-#    - intermediates: the numeric steps
-#    - answer: the final formatted result
+# This module implements the "planning and execution" stage of the RAG pipeline
+# using a two-step LLM approach:
+# 1. Specify Expression (Step 1): Takes the question and retrieved evidence chunks.
+#    - Calls an LLM (specify_and_generate_expression) to determine the required
+#      financial items, map them to variables (e.g., VAL_1), and generate a 
+#      Python expression template (e.g., "(VAL_1 - VAL_2) / VAL_2") to answer the question.
+#      It also determines the required output format/units.
+# 2. Extract Values (Step 2): Takes the required items map from Step 1 and evidence.
+#    - Calls an LLM (extract_all_values_with_llm) to find the numerical values for
+#      each required item within the provided evidence chunks.
+# 3. Execute: Substitutes the extracted values into the Python expression template
+#    and evaluates it to compute the final answer. Handles scaling and formatting.
 #
 # Main functions:
-# - generate_tool_call(question, evidence_chunks, chat_history=None):
-#     Builds the function-calling JSON payload for the LLM based on question & evidence.
-# - plan_and_execute(question, evidence_chunks, chat_history=None):
-#     Runs generate_tool_call, executes the returned program, handles errors & fallbacks,
-#     and composes the final output.
+# - specify_and_generate_expression(question, evidence_chunks): 
+#     Performs Step 1: generates the calculation plan (required items, expression template).
+# - extract_all_values_with_llm(required_items_map, evidence_chunks):
+#     Performs Step 2: extracts numerical values from evidence based on the plan.
+# - plan_and_execute(question, evidence_chunks):
+#     Orchestrates the full process: calls Step 1, then Step 2, executes the 
+#     expression, handles errors (e.g., extraction failures), and returns a 
+#     structured dict containing program, intermediates, answer, tool used, and evidence IDs.
 ########################################################################
 """
 
@@ -31,8 +35,6 @@ import warnings
 import re
 import os
 from typing import Any, Dict, List, Tuple, Optional
-# Note: finrag.tools import might be needed if eval uses run_math_tool directly, but agent itself doesn't
-# from finrag.tools import MathToolInput, run_math_tool 
 import logging
 import math # Needed for safe eval context
 

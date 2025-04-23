@@ -10,5 +10,3 @@ def main() -> None:
     parser.add_argument("--split", choices=["train", "dev", "test"], required=True)
     parser.add_argument("--sample", type=int, default=None)
     args = parser.parse_args()
-    # TODO: load data, call answer for each example, compute and print metrics
-    print("Evaluation not implemented yet")
