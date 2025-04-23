@@ -20,14 +20,8 @@ except ImportError as e:
 # --- Removed load_data function (no sample loading) ---
 
 st.set_page_config(layout="wide") # Use wider layout
-st.title("FinRAG: Global Search & Reasoning Assistant")
-st.markdown("Ask a question to search across the indexed financial reports.")
-
-# --- Sidebar Removed --- 
-
-# --- Sample Selection Removed ---
-
-# --- Quick Questions Removed ---
+st.title("FinRAG: Financial Reasoning Assistant")
+st.markdown("Ask a question to search across the indexed financial reports from the ConvFinQA dataset.")
 
 # --- Main Panel (No Columns) ---
 
@@ -48,7 +42,7 @@ question = st.text_area(
 )
 
 # Button to trigger retrieval
-if st.button("Retrieve Evidence (Global Search)", use_container_width=True):
+if st.button("Retrieve Evidence", use_container_width=True):
     st.session_state['raw_chunks'] = [] # Clear previous results
     st.session_state['reranked_chunks'] = []
     st.session_state['agent_result'] = None
@@ -125,4 +119,3 @@ if st.session_state.get('agent_result'):
 
     # --- Gold Answer Comparison Removed ---
 
-# --- Column 2 Removed ---
