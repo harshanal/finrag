@@ -475,9 +475,9 @@ Relevant Evidence:
     # --- API Call --- 
     try:
         # Using default extraction model (gpt-4o-mini unless overridden)
-        # model_name = os.getenv("OPENAI_CHAT_MODEL_EXTRACTION", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
+        model_name = os.getenv("OPENAI_CHAT_MODEL_EXTRACTION", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
         # --- Experiment: Use Stronger Model for Extraction --- 
-        model_name = os.getenv("OPENAI_CHAT_MODEL_SMART", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o")) 
+        # model_name = os.getenv("OPENAI_CHAT_MODEL_SMART", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o")) # REVERTED
         logger.info(f"Using OpenAI model: {model_name} for multi-value extraction of {len(required_items)} items.")
         response = openai.ChatCompletion.create(
             model=model_name,
