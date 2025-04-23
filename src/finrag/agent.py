@@ -215,6 +215,7 @@ You are a meticulous financial analyst assistant. Your task is to analyze a ques
 4.  **Identify Output Format:** Specify if the final answer should be formatted as a 'number' or a 'percent'. 
     *   Use 'percent' if the calculation type is `percentage_change` or `ratio`.
     *   Use 'percent' if the question asks for a comparison between percentages (e.g., "difference in percentage change", "outperform by percent").
+    *   **IMPORTANT:** If the calculation type is `average`, `sum`, or `difference`, AND the *input values* being operated on (based on their descriptions in `required_items_map`) are already percentages (e.g., "Effective Tax Rate %"), then the `output_format` MUST be 'number', as the result is already in percentage units.
     *   Otherwise, use 'number'.
 
 **Input Format:**
@@ -247,19 +248,19 @@ Relevant Evidence:
 }}
 ```
 
-**Example 2 (Average):**
-*Question:* Average Operating Income from 2020 to 2022?
+**Example 2 (Average of Percentages):**
+*Question:* Average effective tax rate for 2015 and 2014?
 *Output Args:*
 ```json
 {{
   "calculation_type": "average",
-  "required_items_map": {{ "VAL_1": "Operating Income 2020", "VAL_2": "Operating Income 2021", "VAL_3": "Operating Income 2022" }},
-  "python_expression_template": "(VAL_1 + VAL_2 + VAL_3) / 3",
-  "output_format": "number" 
+  "required_items_map": {{ "VAL_1": "Effective Tax Rate % 2015", "VAL_2": "Effective Tax Rate % 2014" }},
+  "python_expression_template": "(VAL_1 + VAL_2) / 2",
+  "output_format": "number" # Inputs are percentages, so output is already a percentage number
 }}
 ```
 
-**Example 3 (Difference of Percentages):**
+**Example 3 (Difference of Ratios):**
 *Question:* What was the difference in percentage change between Index A and Index B from 2010 to 2015?
 *Output Args:*
 ```json
@@ -474,7 +475,9 @@ Relevant Evidence:
     # --- API Call --- 
     try:
         # Using default extraction model (gpt-4o-mini unless overridden)
-        model_name = os.getenv("OPENAI_CHAT_MODEL_EXTRACTION", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
+        # model_name = os.getenv("OPENAI_CHAT_MODEL_EXTRACTION", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
+        # --- Experiment: Use Stronger Model for Extraction --- 
+        model_name = os.getenv("OPENAI_CHAT_MODEL_SMART", os.getenv("OPENAI_CHAT_MODEL", "gpt-4o")) 
         logger.info(f"Using OpenAI model: {model_name} for multi-value extraction of {len(required_items)} items.")
         response = openai.ChatCompletion.create(
             model=model_name,
