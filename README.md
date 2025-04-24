@@ -28,10 +28,10 @@ The following diagram illustrates the core workflow of FinRAG:
                           +--------------------------+                     
                                       |
                                       v                      
-                          +--------------------------+                     
-                          |   Final Answer + Details |
+                          +-----------------------------+                     
+                          |   Final Answer + Details    |
                           |  (Formatted + Intermediates)|                     
-                          +--------------------------+                     
+                          +-----------------------------+                     
 ```
 
 For a detailed explanation of the system architecture, data flow, and component interactions, please refer to the [Design & Architecture Document](docs/design_architecture.md).
@@ -49,8 +49,10 @@ Selected for its strong reasoning, instruction following, function-calling capab
 
 ### EMBEDDING_MODEL
 
-Default: `text-embedding-ada-002`
-Employed by `src/finrag/embeddings.py` to compute semantic embeddings for text and table chunks stored in ChromaDB. Chosen for high-quality embeddings suitable for semantic search, efficient performance, and cost-effectiveness for indexing financial documents.
+Default: `all-mpnet-base-v2`
+Employed by `src/finrag/embeddings.py` using the `sentence-transformers` library to compute local semantic embeddings for text and table chunks stored in ChromaDB. This model runs locally and is chosen for its strong performance on semantic search tasks without requiring external API calls.
+
+Note: Initial development phases utilised OpenAI's `text-embedding-ada-002` model before transitioning to the local `sentence-transformers` approach.
 
 These model identifiers can be customised in your `.env` file (referencing `OPENAI_CHAT_MODEL` and `EMBEDDING_MODEL` variables) to experiment with different compatible models.
 
@@ -60,14 +62,14 @@ FinRAG's supplementary guides and logs are available in the `docs/` folder:
 | Document                   | Path                                    | Description                                           |
 |----------------------------|-----------------------------------------|-------------------------------------------------------|
 | Product Requirements (PRD) | [docs/PRD.md](docs/PRD.md)              | Objectives, features, non-functional requirements     |
-| Design & Architecture      | [docs/design_architecture.md](docs/design_architecture.md) | System design, data flow, component overview          |
-| Engineering Log            | [docs/engineering_log.md](docs/engineering_log.md)         | Development milestones, decisions, challenges         |
-| Evaluation                 | [docs/evaluation.md](docs/evaluation.md)                   | Evaluation metrics, CLI usage, sample outputs         |
-| Production Planning        | [docs/productionisation_plan.md](docs/productionisation_plan.md) | Production readiness, observability, cost strategies  |
+| Design & Architecture      | [docs/design_architecture.md](docs/design_architecture.md) | System design, component overview          |
+| Engineering Log            | [docs/engineering_log.md](docs/engineering_log.md)         | Log of architecture, decisions, experiments, challenges and outcomes during development         |
+| Evaluation                 | [docs/evaluation.md](docs/evaluation.md)                   | Evaluation strategy, metrics, sample outputs         |
+| Production Planning        | [docs/productionisation_plan.md](docs/productionisation_plan.md) | Thoughts about scaling this prototype in to production  |
 | Requirements & Setup       | [docs/requirements_setup.md](docs/requirements_setup.md)   | Setup guide: dependencies, env vars, directory layout |
 | Streamlit UI Walkthrough   | [docs/streamlit_ui_walkthrough.md](docs/streamlit_ui_walkthrough.md) | Streamlit interface guide with screenshots            |
 | Test Suite Summary         | [docs/test_suite_summary.md](docs/test_suite_summary.md)   | Automated test overview: coverage, mocks, outputs     |
-| Alternate PRD (prd2)       | [docs/prd2.md](docs/prd2.md)                 | (Potentially alternate or draft PRD version)          |
+
 
 
 ## Dataset

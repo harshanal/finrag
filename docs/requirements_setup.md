@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 ---
 
-## 🛠️ Environment Setup
+## Environment Setup
 
 ### Python Version
 
