@@ -72,10 +72,10 @@ This document outlines the architectural design and system flow for FinRAG, an L
                           +--------------------------+                     
                                       |
                                       v                      
-                          +--------------------------+                     
-                          |   Final Answer + Details |
+                          +-----------------------------+                     
+                          |   Final Answer + Details    |
                           |  (Formatted + Intermediates)|                     
-                          +--------------------------+                     
+                          +-----------------------------+                     
 ```
 
 ---
@@ -106,6 +106,7 @@ This document outlines the architectural design and system flow for FinRAG, an L
 - The two-step agent allows for specialized prompts and potentially different models for planning vs. extraction (though currently uses the same model class by default).
 - Use of standard Python `eval()` simplifies execution compared to a custom DSL.
 - Relies on `python-dotenv` for managing API keys.
+For detailed implementation history and technical decisions, see [@engineering_log.md](engineering_log.md).
 
 ---
 
