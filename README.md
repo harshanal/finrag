@@ -2,7 +2,7 @@
 
 FinRAG is a Retrieval-Augmented Generation (RAG) system tailored for quantitative reasoning over financial reports, built on the ConvFinQA dataset. It orchestrates evidence retrieval, DSL planning, and numeric execution to answer complex questions.
 
-![Landing Page](screenshots/landing_page_small.png)
+![Landing Page](docs/screenshots/landing_page_small.png)
 
 ## RAG Pipeline Overview
 
