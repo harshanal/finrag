@@ -118,7 +118,7 @@ Benchmark and monitor pipeline performance across samples using controlled metri
 
 ### Deliverables
 
-- `run_evaluation.py` CLI tool for evaluation.
+- `eval.py` CLI tool for evaluation.
 - Metrics including execution accuracy, program template generation success (`substitute_failed` rate), and value extraction success.
 - Evaluation logs in JSONL format for detailed traceability.
 - Integration with **Weights & Biases (W&B)** for logging metrics, parameters (model names, prompt versions), and evaluation results.

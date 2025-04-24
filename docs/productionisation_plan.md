@@ -15,7 +15,7 @@
 
 ---
 
-## 3. Agile Development Roadmap (Revised based on Prototype)
+## 3. Agile Development Roadmap (Based on Prototype)
 
 **Methodology:** Scrum (2‑week sprints)
 
@@ -57,7 +57,7 @@
     - **Vector Store:** ChromaDB (consider managed cloud options) or alternative (e.g., pgvector, managed vector DBs) indexed with `all-mpnet-base-v2` or similar Sentence Transformer.
     - **Reranker:** Cohere ReRank API.
     - *Future:* Consider adding BM25/sparse vector fusion before reranking.
-**Evaluation:** Extend prototype's `run_evaluation.py` and **Weights & Biases (W&B)** integration for ongoing monitoring.
+**Evaluation:** Extend prototype's `eval.py` and **Weights & Biases (W&B)** integration for ongoing monitoring.
 
 **Services:**
 
@@ -91,7 +91,7 @@
 
 - Secure API keys via cloud provider secret management (e.g., AWS Secrets Manager, GCP Secret Manager).
 - Role-based access control (RBAC) for API and infrastructure.
-- Input validation and sanitization to mitigate prompt injection.
+- Input validation and sanitisation to mitigate prompt injection.
 - Data redaction/encryption (if handling sensitive PII beyond source documents).
 - Audit logs for requests, agent steps, and final answers.
 
@@ -101,7 +101,7 @@
 
 | Activity                     | Frequency  | Resource           | Tool/Method                          |
 | ---------------------------- | ---------- | ------------------ | ------------------------------------ |
-| Performance Regression Eval  | Bi-weekly  | ML/Backend Eng     | `run_evaluation.py` / W&B Dashboard |
+| Performance Regression Eval  | Bi-weekly  | ML/Backend Eng     | `eval.py` / W&B Dashboard |
 | Prompt Review & Tuning       | Monthly    | ML/Backend Eng     | W&B Analysis, Manual Review        |
 | LLM/Embedding Model Updates  | Quarterly+ | ML/Backend Eng     | Re-evaluation, W&B Comparison      |
 | Cost Auditing                | Monthly    | Platform Eng + PM  | Cloud Billing + Usage Logs         |
