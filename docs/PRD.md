@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): FinRAG – Financial Reasoning Assistant
 
 ## Document Version
-- **Version:** 1.1 (Reflecting Final Prototype State)
+- **Version:** 1.1
 - **Last Updated:** 2025-04-23
 - **Author:** Harshana Liyanage
 
@@ -23,7 +23,7 @@ The task is to create a question-answering system that works on the ConvFinQA da
 
 ---
 
-## 3. Core Features and Functional Requirements (Reflecting Final State)
+## 3. Core Features and Functional Requirements
 
 ### P1 – Retrieval MVP
 - Build multi-stage retriever using **ChromaDB** for dense vector search (primary) and **BM25Okapi** (fallback, context-dependent).
@@ -84,7 +84,7 @@ The task is to create a question-answering system that works on the ConvFinQA da
 
 --- 
 
-## 6. Risks & Mitigations (Reflecting Final State)
+## 6. Risks & Mitigations 
 
 | Risk                                     | Mitigation                                                                                             |
 |------------------------------------------|--------------------------------------------------------------------------------------------------------|
@@ -92,18 +92,18 @@ The task is to create a question-answering system that works on the ConvFinQA da
 | LLM value extraction errors/hallucinations| Detailed prompts with scaling instructions & negative constraints; Handle `null` returns; Log intermediates. |
 | `eval()` security concerns               | Use `eval()` with restricted `globals` and `locals` to prevent execution of arbitrary code.           |
 | Long indexing time for ChromaDB          | Document time taken; Suggest GPU use for faster re-indexing; Perform indexing as a separate setup step. |
-| LLM API errors / costs                   | Implement basic error handling; Use efficient models (e.g., GPT-4o-mini); Manage API keys via `.env`.      |
+| LLM API errors / costs                   | Implement basic error handling; Use efficient models (e.g., GPT-4o-mini)    |
 
 --- 
 
-## 7. Stretch Goals / Future Work (Updated)
+## 7. Stretch Goals / Future Work
 
 - **Hybrid Search Fusion**: Implement fusion of sparse (BM25) and dense (ChromaDB) results *before* reranking.
 - **Advanced Chunking/Retrieval**: Explore proposition-based indexing, smaller/overlapping chunks, or recursive retrieval.
 - **Improved Value Extraction**: Investigate dedicated NER/parsing models or more sophisticated LLM prompting techniques for numerical extraction and scaling.
 - **Agent Self-Correction/Refinement**: Add logic for the agent to retry steps or refine its plan upon encountering errors.
-- **Broader Tool Integration**: Explore tools beyond basic calculation (e.g., web search for current data, plotting).
-- **OCR/Multimodal Input**: Integrate tools for processing tables/figures directly from images/PDFs (e.g., LlamaParse, vendor solutions).
+- **Structured Tool Integration**: Enhance tool integration beyond basic calculation (e.g., web search for current data, plotting). Explore standardised approaches (like the Model Context Protocol - MCP) to define tool schemas and manage interactions, enabling more robust and scalable multi-tool use by the agent.
+- **Multimodal Input**: Integrate tools for processing tables/figures directly from images/PDFs (e.g., LlamaParse, vendor solutions).
 - **Productionisation Readiness**: Enhance observability, monitoring, and cost tracking.
 
 --- 
