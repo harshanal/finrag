@@ -4,6 +4,28 @@ import re
 from typing import Any, Dict, List, Union
 
 
+# --- START REMOVAL: Number Cleaning (Moved to agent.py) ---
+# def clean_numeric_string(s: str) -> str:
+#     """Clean a string potentially representing a number to a pure numeric format."""
+#     s = s.strip()
+#     # Handle parentheses for negative numbers: e.g., (500) -> -500
+#     if s.startswith('(') and s.endswith(')'):
+#         s = '-' + s[1:-1]
+#     # Remove currency symbols and commas
+#     s = s.replace('$', '').replace(',', '')
+#     # Handle percentage sign: e.g., 15% -> 0.15
+#     if s.endswith('%'):
+#         try:
+#             # Attempt to convert the part before '%' to float and divide by 100
+#             return str(float(s[:-1]) / 100.0)
+#         except ValueError:
+#             # If conversion fails, return the string without '%' for potential later handling
+#             # or let the subsequent float/int conversion attempt fail.
+#             return s[:-1] 
+#     return s
+# --- END REMOVAL ---
+
+
 class ArgRef:
     """Reference to a previous operation result by index."""
 
@@ -47,10 +69,20 @@ def parse_program(program_str: str) -> List[Operation]:
                 idx = int(arg[1:])
                 args.append(ArgRef(idx))
             else:
-                if "." in arg:
-                    args.append(float(arg))
-                else:
-                    args.append(int(arg))
+                # --- START REVERT: Remove cleaning call ---
+                # cleaned_arg = clean_numeric_string(arg)
+                try:
+                    # if "." in cleaned_arg or "e" in cleaned_arg.lower():
+                    if "." in arg or "e" in arg.lower(): # Revert to check original arg
+                        # args.append(float(cleaned_arg))
+                        args.append(float(arg)) # Revert to convert original arg
+                    else:
+                        # args.append(int(cleaned_arg))
+                        args.append(int(arg)) # Revert to convert original arg
+                except ValueError:
+                     # raise ValueError(f"Could not parse argument '{arg}' (cleaned to '{cleaned_arg}') as number.")
+                     raise ValueError(f"Could not parse argument '{arg}' as number.") # Revert error message
+                # --- END REVERT ---
         ops.append(Operation(name, args))
     return ops
 

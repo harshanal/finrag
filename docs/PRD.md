@@ -1,119 +1,130 @@
-
 # Product Requirements Document (PRD): FinRAG – Financial Reasoning Assistant
 
 ## Document Version
-- **Version:** 1.0
-- **Last Updated:** 2025-04-20
+- **Version:** 1.1 (Reflecting Final Prototype State)
+- **Last Updated:** 2025-04-23
 - **Author:** Harshana Liyanage
 
 ---
 
 ## 1. Objective
 
-To build a prototype LLM-powered system (FinRAG) that answers complex financial questions based on financial documents (text and tables), demonstrating tool-use, numerical reasoning, conversational memory, and accuracy reporting.
+To build a prototype LLM-powered system (FinRAG) that answers complex financial questions based on financial documents (text and tables), demonstrating multi-stage retrieval, a robust two-step reasoning agent, Python expression execution, experiment tracking, and accuracy reporting.
 
 ---
 
 ## 2. Background
 
 The task is to create a question-answering system that works on the ConvFinQA dataset, showcasing:
-- Retrieval from unstructured and semi-structured documents.
-- Execution of DSL-based mathematical operations.
-- Robust architecture for production-level LLM solutions.
-- Evaluation metrics and explainability.
+- Retrieval from unstructured and semi-structured documents using vector search and reranking.
+- Execution of mathematical operations derived from LLM-generated Python expression templates.
+- A modular RAG architecture suitable for iterative development.
+- Evaluation metrics tracking and experiment logging for explainability.
 
 ---
 
-## 3. Core Features and Functional Requirements
+## 3. Core Features and Functional Requirements (Reflecting Final State)
 
 ### P1 – Retrieval MVP
-- Build hybrid retriever using BM25 + OpenAI embeddings.
-- Integrate Cohere rerank to re-rank top-k candidates.
-- Evaluate using Recall@k on a dev subset (target: >80%).
+- Build multi-stage retriever using **ChromaDB** for dense vector search (primary) and **BM25Okapi** (fallback, context-dependent).
+- Use locally computed embeddings (`all-mpnet-base-v2`) for ChromaDB indexing.
+- Integrate **Cohere rerank** API to re-rank top-k candidates retrieved.
+- Evaluate using Recall@k on a dev subset.
 
-### P2 – Tool Schema & Executor
-- Implement structured DSL parser (add, subtract, divide, percentage).
-- Use OpenAI function-calling API with structured output.
-- Validate tool programs using Pydantic schema.
-- Execute DSL using a secure Python interpreter or function dispatcher.
+### P2 – Agent Core: Two-Step Reasoning
+- Implement a two-step agent process:
+    - **Step 1 (`specify_and_generate_expression`):** LLM analyzes question + evidence to generate a calculation plan, including required items mapped to placeholders (VAL_1, VAL_2...) and a standard **Python expression template**.
+    - **Step 2 (`extract_all_values_with_llm`):** LLM extracts numerical values for the required items from evidence, applying scaling (millions, %, etc.).
+- Use OpenAI function-calling API to structure LLM outputs for both steps.
+- Validate key outputs from LLM steps (e.g., presence of required fields, basic safety checks on templates).
 
-### P3 – Agent Orchestration
-- Implement `plan_and_execute()` logic to tie together retrieval, planning, and execution.
-- Include regex fallback for malformed outputs.
-- Ensure full traceability through logs for DSL, context, results.
+### P3 – Agent Orchestration & Execution
+- Implement `plan_and_execute()` logic to orchestrate the two-step agent flow.
+- Substitute extracted values into the Python expression template.
+- Execute the populated Python expression using a safe `eval()` context.
+- Ensure full traceability through logs for the plan, extracted values, final expression, and answer.
 
-### P4 – Evaluation Framework
-- Provide CLI to evaluate system on dev/test split.
+### P4 – Evaluation Framework & Experiment Tracking
+- Provide `run_evaluation.py` CLI to evaluate system on dev/test split.
 - Compute:
   - Execution Accuracy
-  - Program Match Rate
-  - Tool Usage Rate
-- Log full run with gold answers and generated DSL for inspection.
+  - Failure analysis (e.g., `substitute_failed`, `eval_failed` rates)
+- Log full run details (plan, values, answer, gold standard) in JSONL format.
+- Integrate **Weights & Biases (W&B)** for logging metrics, parameters, and evaluation results across runs.
 
 ### P5 – Streamlit Interface
-- Build interactive UI for live demonstrations.
+- Build interactive UI (`app.py`) for live demonstrations of the **global search** pipeline.
 - Components:
   - Question input
-  - Retrieved context (pre/post rerank)
-  - DSL program + result
-  - Comparison with ground-truth answer
-- Include dropdown for sample questions and context highlighting.
+  - Retrieved context display (pre/post rerank)
+  - Agent results: Final Answer (prominent), Python Expression Template, Intermediate Values (plan + extracted values), Raw Debug Output.
+- Implement two-button flow (Retrieve -> Run Agent).
 
-### P6 – Pinecone Integration
-- Upsert 500+ chunks to Pinecone for semantic search.
-- Add fallback to BM25 when Pinecone fails or returns empty.
-- Track upload limits due to Pinecone's free tier (570 records max).
-- Measure and compare accuracy vs BM25 baseline.
+### P6 – Vector Store Implementation: ChromaDB
+- Index the full `train.json` dataset (~10k+ chunks) into a local, persistent **ChromaDB** store (`./chroma_db_mpnet`).
+- Use `all-mpnet-base-v2` embeddings computed locally for indexing.
+- Provide script (`scripts/load_chroma_mpnet.py`) for repeatable indexing.
 
----
+--- 
 
 ## 4. Non-Functional Requirements
 
-- **Performance**: Tool execution latency < 2 seconds per query.
-- **Reliability**: Fallback mechanisms ensure tool execution and retrieval never fail silently.
-- **Scalability**: Modular retrieval and agent logic for cloud-scale expansion.
-- **Explainability**: Each step (retrieval, planning, execution) is exposed for traceability.
+- **Performance**: Agent execution latency acceptable for interactive use (typically < 10-15 seconds per query, depending on LLM response times).
+- **Reliability**: Graceful handling of LLM errors (e.g., invalid JSON, failed extraction) and retrieval failures.
+- **Modularity**: Maintain logical separation between retrieval, agent steps (planning, extraction), and execution.
+- **Explainability**: Each step's inputs and outputs are logged and displayed in the UI where appropriate.
 
----
+--- 
 
 ## 5. Evaluation Metrics
 
-- **Execution Accuracy**: Does the output value match the answer?
-- **Program Match Rate**: Does the generated DSL match gold program?
-- **Tool Usage Rate**: Is the planner consistently producing valid DSL programs?
+- **Execution Accuracy**: Does the final computed answer match the gold answer (within tolerance)?
+- **Failure Rate Analysis**: Track rates of failures at different stages (e.g., `specify_or_express_failed`, `substitute_failed`, `eval_failed`).
+- **Tool Usage Rate:** (Less relevant with Python eval) Monitor successful completion of the `plan_and_execute` flow.
 
----
+--- 
 
-## 6. Risks & Mitigations
+## 6. Risks & Mitigations (Reflecting Final State)
 
-| Risk | Mitigation |
-|------|------------|
-| Limited Pinecone index capacity | Use top-performing 570 records, fallback to BM25 |
-| LLM generating malformed outputs | Enforce JSON schema via Pydantic + regex fallback |
-| Low recall affecting accuracy | Use reranking and chunk ID traceability |
-| Model hallucination | Evidence-aware prompts, numerical grounding |
+| Risk                                     | Mitigation                                                                                             |
+|------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| Global retrieval lacks precision         | Use Cohere reranker; Log retrieved chunks for analysis; Acknowledge limitation in documentation.         |
+| LLM value extraction errors/hallucinations| Detailed prompts with scaling instructions & negative constraints; Handle `null` returns; Log intermediates. |
+| `eval()` security concerns               | Use `eval()` with restricted `globals` and `locals` to prevent execution of arbitrary code.           |
+| Long indexing time for ChromaDB          | Document time taken; Suggest GPU use for faster re-indexing; Perform indexing as a separate setup step. |
+| LLM API errors / costs                   | Implement basic error handling; Use efficient models (e.g., GPT-4o-mini); Manage API keys via `.env`.      |
 
----
+--- 
 
-## 7. Stretch Goals / Future Work
+## 7. Stretch Goals / Future Work (Updated)
 
-- OpenAI Evals or W&B integration for visual eval tracking.
-- Document-level retrieval using FAISS/HNSW.
-- DSL expansion (multi-hop chaining).
-- OCR and figure analysis integration (in production scenario consider multimodal tools such as Landing.ai's Agentic Document Extraction or LlamaParse )
-- Productionisation readiness (observability, consolidated cost monitoring across 3rd party services).
+- **Hybrid Search Fusion**: Implement fusion of sparse (BM25) and dense (ChromaDB) results *before* reranking.
+- **Advanced Chunking/Retrieval**: Explore proposition-based indexing, smaller/overlapping chunks, or recursive retrieval.
+- **Improved Value Extraction**: Investigate dedicated NER/parsing models or more sophisticated LLM prompting techniques for numerical extraction and scaling.
+- **Agent Self-Correction/Refinement**: Add logic for the agent to retry steps or refine its plan upon encountering errors.
+- **Broader Tool Integration**: Explore tools beyond basic calculation (e.g., web search for current data, plotting).
+- **OCR/Multimodal Input**: Integrate tools for processing tables/figures directly from images/PDFs (e.g., LlamaParse, vendor solutions).
+- **Productionisation Readiness**: Enhance observability, monitoring, and cost tracking.
 
----
+--- 
 
 ## 8. Appendix
 
 - Dataset: [ConvFinQA GitHub Repo](https://github.com/czyssrs/ConvFinQA)
-- Gold Example:
+- Gold Example (Illustrative of Planning Step):
   ```json
   {
     "question": "What was the percentage change in net cash from operating activities from 2008 to 2009?",
     "answer": "14.1%",
-    "program": "subtract(2009_value, 2008_value), divide(#0, 2008_value)"
+    "// Step 1 Output (Illustrative)": {
+        "calculation_type": "percentage_change",
+        "required_items_map": {
+            "VAL_1": "Net cash from operating activities 2009",
+            "VAL_2": "Net cash from operating activities 2008"
+         },
+        "python_expression_template": "(VAL_1 - VAL_2) / VAL_2",
+        "output_format": "percent"
+    }
   }
   ```
 

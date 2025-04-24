@@ -2,7 +2,7 @@
 
 ## Overview
 
-This log documents the technical evolution of the FinRAG prototype, aligned with key milestones outlined in the product requirements document (PRD). Each section details decisions made, challenges faced, and lessons learned across the development cycle.
+This log documents the technical evolution of the FinRAG prototype over a one-week development period, aligned with key milestones outlined in the product requirements document (PRD). Each section details decisions made, challenges faced, and lessons learned across the development cycle, aiming for transparency in the decision-making process.
 
 ---
 
@@ -10,169 +10,139 @@ This log documents the technical evolution of the FinRAG prototype, aligned with
 
 ### Objective
 
-Develop a hybrid retriever combining lexical (BM25) and semantic (OpenAI embeddings) retrieval, enhanced with reranking via Cohere.
+Develop a hybrid retriever combining lexical (BM25) and semantic (OpenAI embeddings) retrieval, enhanced with reranking via Cohere, initially focused on retrieving evidence within the context of a specific financial document (page-level retrieval).
 
 ### Deliverables
 
-- `retriever.py` with hybrid search logic
+- `retriever.py` with initial hybrid search logic (BM25 + Embeddings + Reranker)
 - Chunking and ID tagging via `chunk_utils.py`
-- Evaluation notebook for top-k recall
+- Evaluation notebook for top-k recall within document context
 
 ### Design Decisions
 
-- Combined top-k BM25 and embedding-based retrieval to offset the weakness of either method individually.
+- Combined top-k BM25 and embedding-based retrieval intended to offset weaknesses of each method.
 - Integrated Cohere as a reranking layer on fused retrieval results.
-- Split text by paragraph and tables by row; tagged all chunks with unique identifiers.
+- Split text by paragraph and tables by row; tagged chunks with unique identifiers (`sample_id::chunk_type::position`).
 
 ### Key Issues
 
-- Semantic-only retrieval initially returned low-recall results.
-- Errors in chunk ID generation caused ambiguous or duplicate mappings.
+- Initial semantic-only retrieval showed low recall without BM25 fusion.
+- Chunk ID generation needed refinement for uniqueness.
 
 ### Fixes and Enhancements
 
-- Developed unit tests to evaluate recall on a fixed dev subset.
+- Developed unit tests for recall on a fixed dev subset.
 - Normalized token processing in BM25 and refined rerank cutoff thresholds.
 
 ### Outcome
 
-Achieved recall above 80% on benchmark. Provided a reliable base for context-aware DSL generation.
+Achieved good recall within the constrained page-level context. Provided a reliable base for the initial agent development focused on reasoning over provided evidence.
 
 ---
 
-## P2 – Tool Schema and Executor
+## P2 – Initial Agent Design: DSL Generation
 
 ### Objective
 
-Formalise a DSL execution engine and integrate tool calling via OpenAI’s function-calling API.
+Develop an agent capable of planning and executing calculations based on retrieved evidence, initially using a custom Domain-Specific Language (DSL) and OpenAI's function-calling.
 
 ### Deliverables
 
-- DSL interpreter (`calculator.py`, `dsl.py`)
-- DSL planner logic in `agent.py`
-- Tests for math operations, formatting, and execution chaining
+- Initial DSL interpreter (`calculator.py`, `dsl.py` - *later deprecated*)
+- Initial DSL planner logic in `agent.py` using function calling
+- Tests for math operations and DSL execution
 
 ### Design Decisions
 
-- Designed a simple DSL for unary and binary operations (add, subtract, divide, percentage).
-- Used LLM to generate tool instructions and offloaded execution to deterministic Python functions.
-- Structured DSL validation using a tool schema before execution.
+- Designed a simple DSL for common financial calculations (add, subtract, divide, percentage).
+- Aimed to use LLM function-calling to generate DSL programs based on question and evidence.
+- Offloaded execution to deterministic Python functions interpreting the DSL.
 
 ### Key Issues
 
-- Inconsistent LLM outputs included malformed JSON, extra formatting, and irregular function\_call usage.
-- Errors in percentage formatting led to rounding mismatches.
+- LLM output inconsistency: malformed JSON, incorrect function calls, extraneous text.
+- DSL generation proved brittle; small changes in evidence or question phrasing led to invalid programs.
+- Error handling for DSL execution was complex.
 
 ### Fixes
 
-- Introduced `format_percentage` for clean and consistent result formatting.
-- Added structured parsing using Pydantic models to validate tool instructions prior to execution.
-- Integrated a regex-based fallback mechanism to recover DSL program strings when structured output was unavailable.
-- This two-layered strategy significantly reduced malformed program errors and increased execution success rates.
+- Introduced Pydantic models for stricter validation of expected function call arguments (*partially successful*).
+- Implemented regex fallbacks to extract DSL programs from malformed LLM responses.
 
 ### Outcome
 
-Tool execution succeeded for all supported DSL operations.&#x20;
+Demonstrated feasibility of LLM generating calculation steps, but highlighted the fragility and complexity of the DSL approach. Tool execution success was inconsistent. **Decision:** Pivot agent design away from DSL generation towards a more robust two-step approach.
 
 ---
 
-## P3 – Agent Orchestration
+## P3 – Agent Architecture Pivot: Two-Step Python Expression
 
 ### Objective
 
-Combine retriever, planner, and executor into a unified LLM-driven orchestration flow.
+Redesign the agent to improve robustness and simplify execution by using a two-step LLM process: 1) Specify a Python expression template and required variables, 2) Extract variable values from evidence.
 
 ### Deliverables
 
-- `plan_and_execute()` orchestrator function
-- Prompt engineering for few-shot DSL generation
-- Unit and integration tests for end-to-end QA
+- `specify_and_generate_expression` function in `agent.py` (Step 1 LLM call).
+- `extract_all_values_with_llm` function in `agent.py` (Step 2 LLM call).
+- Updated `plan_and_execute` orchestrator to manage the two-step flow and execute the final Python expression using `eval()`.
 
 ### Design Decisions
 
-- Applied chain-of-thought prompting to encourage step-wise tool plan generation.
-- Integrated regex fallback in case function\_call fields were missing.
-- Logged full trace including evidence, LLM response, and executed answer.
+- **Step 1 (Planning):** LLM determines calculation type, required items (e.g., "Net Sales 2021"), maps them to placeholders (VAL_1, VAL_2), and generates a standard Python expression template (e.g., `(VAL_1 - VAL_2) / VAL_2`). This simplifies the LLM's task compared to generating a full DSL program.
+- **Step 2 (Extraction):** A separate LLM call focuses solely on extracting numerical values for the items identified in Step 1, applying scaling based on context (millions, %, etc.).
+- **Execution:** Use Python's `eval()` in a controlled environment to execute the template populated with extracted values. This eliminates the need for a custom DSL interpreter.
 
 ### Key Issues
 
-- LLM occasionally omitted or misformatted tool call responses.
-- Multiline tool plans failed to parse due to syntax errors.
+- Value Extraction Challenges: LLM sometimes failed to find the correct value, hallucinated values, or misinterpreted scaling units (e.g., millions, percentages).
+- Prompt Engineering: Refining prompts for both steps to ensure accurate planning and reliable extraction required significant iteration.
 
 ### Fixes
 
-- Enforced `temperature=0` in all OpenAI calls.
-- Added structured parsing using Pydantic models to validate tool instructions.
+- Added detailed instructions and examples to prompts, including negative constraints for extraction (e.g., don't extract values from descriptions of change).
+- Implemented logic to handle `null` returns from the extraction step and fail gracefully.
+- Added output formatting logic based on the plan from Step 1.
 
 ### Outcome
 
-Stable tool generation with 100% usage success rate on test samples. Improved program match rate and trace transparency.
-
-**LLM prompt developed through iterative refinement:**\
-\
-IMPORTANT: Reply ONLY with a JSON function\_call using the provided schema; do NOT include any explanations or plain text.
-
-You are an expert financial analyst AI. Your task is to answer questions based on provided evidence by generating a program for a simple math DSL.&#x20;
-
-Follow these steps carefully:
-
-1\. Understand the Question: Identify the core calculation needed (e.g., sum, difference, percentage change).
-
-2\. Analyze Evidence: Scan the provided evidence text snippets (e.g., '[c1] Some text with numbers 123 and 456') to find the specific numerical values required by the question. Pay close attention to units (e.g., millions, thousands) and time periods (e.g., 2015, 2016).
-
-&#x20;  \- Ensure numbers extracted account for units (e.g., if evidence says '2.2 billion' and other numbers are in millions, use 2200).
-
-3\. Select Arguments: Extract the \*exact\* numerical values from the evidence that correspond to the concepts in the question. DO NOT use years (like 2015) as calculation arguments unless the question specifically asks for calculations on the years themselves. Use the numbers \*associated\* with those years in the evidence.
-
-4\. Formulate DSL Program: Construct a program using ONLY the allowed DSL functions: \`add\`, \`subtract\`, \`multiply\`, \`divide\`. The program must be a flat sequence of comma-separated calls, like \`func1(arg1, arg2), func2(#0, arg3)\`. Use \`#N\` to reference the result of the N-th previous step (0-indexed).&#x20;
-
-&#x20;  \- Example Percentage Change (New - Old) / Old: \`subtract(NewValue, OldValue), divide(#0, OldValue)\`
-
-&#x20;  \- Example Sum: \`add(Value1, Value2), add(#0, Value3)\`
-
-5\. Output Format: Respond ONLY with a JSON object containing the function call, like \`{"function\_call": {"name": "run\_math\_tool", "arguments": "{\\"program\\": \\"YOUR\_DSL\_PROGRAM\_HERE\\"}"}}\`. Do not include any other text, explanations, or markdown formatting.
-
-Constraints:
-
-\- DO NOT nest function calls (e.g., \`divide(subtract(a,b), b)\` is INVALID).
-
-\- Use only numbers found/derived from the evidence (after adjusting for units) or simple constants (like 100) as arguments.
-
-\- Ensure the program logically answers the question posed.
+This two-step architecture proved significantly more robust and controllable than the DSL approach. Execution success rate improved, although extraction accuracy remained a challenge dependent on prompt quality and model capability.
 
 ---
 
-## P4 – Evaluation Framework
+## P4 – Evaluation Framework & Experiment Tracking
 
 ### Objective
 
-Benchmark and monitor pipeline performance across samples using controlled metrics.
+Benchmark and monitor pipeline performance across samples using controlled metrics, and track experiments systematically.
 
 ### Deliverables
 
-- `eval.py` CLI tool for evaluation
-- Metrics including execution accuracy, program match rate, and tool usage
-- Evaluation logs in JSONL format for traceability
+- `run_evaluation.py` CLI tool for evaluation.
+- Metrics including execution accuracy, program template generation success (`substitute_failed` rate), and value extraction success.
+- Evaluation logs in JSONL format for detailed traceability.
+- Integration with **Weights & Biases (W&B)** for logging metrics, parameters (model names, prompt versions), and evaluation results.
 
 ### Design Decisions
 
-- Evaluated each conversational turn individually.
-- Captured and logged retrieved context, generated DSL, and execution results.
-- Enabled sampling and split-based evaluation using flags.
+- Evaluated each question individually against the pipeline.
+- Captured key intermediate steps (plan, extracted values, final expression) alongside the final answer and gold standard.
+- Used W&B to visualize accuracy trends across different configurations (models, prompts, retrieval strategies), aiding rapid iteration.
+- Enabled sampling and split-based evaluation via CLI flags.
 
 ### Key Issues
 
-- Generated programs occasionally used the wrong inputs due to weak evidence retrieval.
-- Execution accuracy lagged behind program match rate.
+- Defining reliable accuracy metrics (e.g., handling floating point differences, percentage formatting).
+- Ensuring consistent environment setup for reproducible W&B runs.
 
 ### Fixes
 
-- Adjusted prompt templates to clarify required references.
-- Strengthened program parsing to prevent malformed execution.
+- Implemented a flexible `answers_match` function handling numeric and percentage comparisons with tolerance.
+- Documented environment variable usage (`WANDB_MODE=disabled`) for temporarily disabling W&B logging during debugging.
 
 ### Outcome
 
-Tool usage rate stabilized above 97%. Program match rate reached approximately 45%. Execution accuracy improved incrementally to over 21%.
+The evaluation framework coupled with W&B provided crucial visibility into performance bottlenecks and the impact of changes, enabling data-driven development and tuning.
 
 ---
 
@@ -180,131 +150,146 @@ Tool usage rate stabilized above 97%. Program match rate reached approximately 4
 
 ### Objective
 
-Build a clear, interactive dashboard to demonstrate model reasoning and results.
+Build a clear, interactive dashboard to demonstrate the RAG pipeline's reasoning and results, reflecting the latest architecture.
 
 ### Deliverables
 
-- Streamlit app with user input, evidence preview, DSL display, and final answer
-- Support for top-k retrieval panels before and after reranking
-
-
+- Streamlit app (`app.py`) with user input, global evidence retrieval, agent execution trigger, and results display.
+- UI elements showing retrieved/reranked chunks, final answer, program template, and intermediate values.
 
 ### Design Decisions
 
-- Emphasised explainability by exposing retrieval context and toolchain steps.
-
-
-
-  Simplified UI labels for improved readability and interaction.
-
-### Fixes
-
-- Improved formatting of titles and subtitles.
-- Added comparison against gold answer where available.
-
-### Outcome
-
-Fully functional demo enabling step-through analysis of QA behavior. Enhanced user understanding of the LLM-planning-execution pipeline.
-
----
-
-## P6.1 – Pinecone Integration
-
-### Objective
-
-Introduce scalable semantic retrieval using a vector database service (Pinecone) and ensure fallback resilience.
-
-### Deliverables
-
-- Pinecone integration in `retriever.py`
-- CLI script for data upsert to vector store
-- Feature flag for hybrid retrieval mode
-
-### Design Decisions
-
-- Selected Pinecone as a managed vector database to enable semantic search across financial document chunks.
-- Integrated a fallback path using BM25 for resilience if Pinecone is unavailable.
-- Capped uploads to 570 records to stay within the free tier usage limits.
+- Shifted UI from sample-based interaction to **global search** to better reflect a real-world application scenario.
+- Implemented a two-button flow: "Retrieve Evidence" followed by "Run Agent".
+- Focused on explainability by displaying retrieved chunks (before/after reranking) and intermediate agent outputs (plan, extracted values, debug info).
+- Used `st.metric` for prominent display of the final answer.
 
 ### Key Issues
 
-- Pinecone-based retrieval did not improve accuracy, potentially due to limited dataset size and document overlap. Additionally, the full dataset could not be uploaded due to the constraints of the Pinecone free-tier plan, which limited the number of vector inserts and total index size. As a result, only 570 records were included in the index, preventing the retriever from having access to all the necessary financial chunks during inference and evaluation.
-- Misconfigured chunk IDs caused accidental overwriting during embedding uploads.
+- Initial attempts at global search highlighted poorer retrieval quality compared to page-scoped search, sometimes failing to find necessary data chunks.
+- Ensuring smooth state management (`st.session_state`) between the retrieval and agent execution steps.
 
 ### Fixes
 
-- Introduced unique chunk ID suffixes using UUID to prevent collisions.
-- Logged uploads to a file for auditing and reproducibility.
-- Implemented warning and exception handling for empty or failed responses from Pinecone.
+- Refined UI layout using columns and dividers for better readability.
+- Added clear status messages (info, success, warning, error).
 
 ### Outcome
 
-Pipeline supported vector-based semantic retrieval, but effectiveness was limited under the current dataset constraints. BM25 fallback ensured consistent behavior across failures.
-
-
----
-
-## P6.2 – Loading data to vector store
-
-**Objective**  
-Build a repeatable CLI to embed and upsert data chunks into Pinecone with traceability.
-
-**Design Rationale**  
-- Parameterize record limits (`--max-records`) to control costs.  
-- Log question metadata for each chunk to audit.  
-- Prevent ID collisions in Pinecone.
-
-**Implementation Notes**  
-- In `scripts/upsert_to_pinecone.py`, added CLI args `--max-records` and `--question-log`.  
-- Utilised `EmbeddingStore` for batched text embeddings.
-
-**Challenges & Resolutions**  
-- **Overwritten vectors**: identical IDs caused silent overwrites.  
-  *Fix:* Suffix IDs with random UUID.  
----
-
-
-## Experimental Enhancements
-
-### Pinecone Integration
-
-- Enabled via feature flag.
-- Used for semantic vector search across chunks.
-- Accuracy benefits were limited due to small dataset size.
-
-### Structured Output via Pydantic
-
-- Used to validate LLM-generated tool instructions.
-- Reduced invalid program execution and improved robustness.
-
-### Chat Memory for Multi-turn QA
-
-- Maintained chat history across dialogue turns (but chat history was subsequently removed to reduce the  complexity of pipeline execution)
+Fully functional demo showcasing the end-to-end global search RAG pipeline. Effectively demonstrated the two-step agent process and highlighted the challenges of global retrieval in this context.
 
 ---
 
-## Accuracy Evolution
+## P6 – Vector Store Experiment: Pinecone
 
-| Stage                     | Execution Accuracy | Program Match Rate | Tool Usage Rate |
-| ------------------------- | ------------------ | ------------------ | --------------- |
-| Initial (P1)              | 0%                 | 0%                 | \~50%           |
-| Post-Retrieval Fix        | \~17%              | \~35%              | \~90%           |
-| After Parser Improvements | \~21.6%            | \~45%              | 97–100%         |
+### Objective
+
+Evaluate the use of a managed vector database (Pinecone) for potentially more scalable semantic retrieval compared to local BM25/embedding lookups, especially for future larger datasets.
+
+### Deliverables
+
+- Pinecone integration in `retriever.py` (*later removed*).
+- CLI script for data upsert to Pinecone (*later adapted for ChromaDB*).
+- Feature flag for switching retrieval backend.
+
+### Design Decisions
+
+- Selected Pinecone as a representative managed vector DB.
+- Maintained BM25 as a fallback.
+
+### Key Issues & Rationale for Removal
+
+- **Pinecone Free Tier Limitations:** The primary blocker was the free tier's constraints on index size and the number of vectors. We could only index a small fraction (~570 records) of the `train.json` data, not the full dataset.
+- **Inability to Test Global Search:** Due to the partial index, Pinecone could not access all necessary financial chunks during global search queries. This made it impossible to fairly evaluate or improve global retrieval performance using Pinecone under the project constraints.
+- **Decision:** Given that evaluating and improving global search was a key goal, and the free tier prevented comprehensive indexing, Pinecone was removed. The focus shifted to a locally hosted vector store (ChromaDB) that allowed indexing the entire dataset.
+
+### Outcome
+
+Learned about the practical limitations of free tiers for vector databases on moderately sized datasets. Confirmed that partial indexing severely hinders the effectiveness and testability of global retrieval strategies. This justified the pivot to ChromaDB.
 
 ---
 
-## Key Learnings
+## P7 – Vector Store Implementation: ChromaDB & Performance Tuning
 
-- Strong retrieval quality is essential for accurate DSL execution.
-- Structured validation of LLM outputs reduces downstream execution errors.
-- Tool-based reasoning frameworks improve transparency and debugging.
-- A debug-oriented UI helps expose model and system behavior effectively.
-  - The UI was enhanced during the development process to add the top\_k records before and after reranking. Also displayed program generated vs gold standard program from data. 
-- Modular feature flags aid in testing experimental features without disrupting core functionality.
-  - (e.g. feature flag for inclusion of Pinecone to the RAG pipeline)
+### Objective
+
+Implement a persistent, locally hosted vector store using ChromaDB to enable full-dataset indexing and facilitate global search evaluation and tuning. Optimize the two-step agent pipeline with this setup.
+
+### Deliverables
+
+- ChromaDB integration in `retriever.py` (replacing Pinecone).
+- Updated upsert script (`scripts/load_chroma_mpnet.py`) for ChromaDB.
+- Iterative tuning of agent prompts (Step 1 & 2) and model selection (testing GPT-4o vs. GPT-4o-mini).
+- W&B logs tracking performance with ChromaDB + two-step agent.
+
+### Design Decisions
+
+- Chose ChromaDB for its ease of local setup and persistence.
+- **Embedding Model Selection:** Adopted the `all-mpnet-base-v2` Sentence Transformer model for generating embeddings. 
+    - **Rationale:** This model offers a strong balance of performance (MTEB benchmarks) and local execution efficiency. Running embeddings locally avoided API costs and potential rate limits associated with embedding the entire dataset (~10k chunks) using external services like OpenAI's API, especially given the ~8 hour indexing time observed.
+- Indexed the entire `train.json` dataset (~10,000+ vector records after chunking) to `./chroma_db_mpnet`.
+- Continued refining the two-step agent, experimenting with different models (GPT-4o vs. GPT-4o-mini) for planning and extraction steps based on W&B results.
+- Tuned retrieval parameters (`chromadb_query_top_k`, reranker `final_top_k`).
+
+### Key Issues
+
+- **Indexing Time:** Indexing the full dataset with embeddings took considerable time (~8 hours) on a laptop without GPU acceleration.
+- **Global Retrieval Accuracy:** While ChromaDB allowed full indexing, achieving high accuracy on global search remained challenging. Retrieved chunks were often relevant but sometimes lacked the specific table/sentence containing the exact numerical value needed for extraction.
+- **Agent Extraction Errors:** The extraction step (Step 2) continued to be a source of errors, requiring careful prompt engineering and model selection.
+
+### Fixes
+
+- Reverted model choices based on W&B experiments (e.g., finding GPT-4o didn't always improve planning and sometimes hurt extraction compared to mini, settling back on mini or a consistent model for both steps).
+- Iteratively refined extraction prompts with scaling instructions and negative constraints.
+
+### Outcome
+
+Successfully implemented ChromaDB, enabling full-dataset indexing and proper testing of the global search pipeline. Achieved a peak **execution accuracy of ~62.5%** on the `train_sample20` evaluation set with the optimized ChromaDB + two-step agent configuration. Identified global retrieval and robust value extraction as key areas for future improvement.
 
 ---
 
-_Note: Throughout this project, I employed AI tools to streamline different phases. OpenAI o3 model assisted with early project scoping, requirement extraction, and documentation workflows. GPT-o4-mini-high was integrated via Windsurf IDE to accelerate iterative development and code review. All strategic decisions, testing, debugging, and architecture were led and verified by me to ensure quality and coherence._
+## Experimental Enhancements Summary
 
-_Using these tools allowed me to move quickly without sacrificing depth. I was able to experiment with multiple architectural paths (page-based vs global search vs vector store) and evolve the pipeline over several iterations in just a few days. The assistants helped convert complex ideas into code faster, enabling me to focus more time on evaluation, metric design, and error analysis. They also supported test-driven development, automating repetitive tasks and generating scaffolding code like BM25 ranking utilities and DSL validators. The ability to offload boilerplate implementation work made space for deeper reasoning, rapid UI integration, and higher-level design decisions within time constraints._
+- **Vector Store:** Transitioned from attempted Pinecone integration (limited by free tier) to successful **ChromaDB** implementation (allowing full dataset indexing).
+- **Agent Architecture:** Shifted from a fragile DSL-based agent to a more robust **two-step LLM process** (Specify Expression -> Extract Values).
+- **Structured Output Validation:** Used schema validation for LLM function calls (both for original DSL attempt and current two-step agent) to improve reliability.
+- **Chat Memory:** Explored briefly but removed to simplify pipeline execution for this phase.
+- **Experiment Tracking:** Leveraged **Weights & Biases (W&B)** throughout for systematic evaluation and tuning.
+
+---
+
+## Accuracy Evolution (Approximate on `train_sample20`)
+
+| Stage                                | Execution Accuracy | Program Match Rate | Tool Usage Rate | Notes                                                                 |
+| ------------------------------------ | ------------------ | ------------------ | --------------- | --------------------------------------------------------------------- |
+| Initial (P1/P2 - DSL Attempt)        | <10%               | <10%               | ~50-70%         | Highly unstable DSL generation                                        |
+| Post Two-Step Agent Intro (P3)       | ~20%               | N/A (Template)     | ~95%+           | Improved stability, extraction issues surfaced                        |
+| Tuned Two-Step Agent                 | ~50%               | N/A (Template)     | ~85%            | Peak before vector store changes, likely benefiting from page-context |
+| ChromaDB + Tuned Agent (P7 - Global) | **~62.5%**         | N/A (Template)     | ~85%            | Peak accuracy with full indexing and global search                    |
+
+*Note: Program Match Rate less relevant for template-based approach; focus shifted to execution accuracy & failure modes (specify vs. extract vs. eval).* 
+
+---
+
+## Key Findings & Future Considerations
+
+- **Global vs. Scoped Retrieval:** Global retrieval is significantly harder than document-scoped retrieval. While ChromaDB enabled full indexing, finding the *exact* data chunk remains a challenge. Hybrid approaches fusing keyword/sparse search (like BM25) *with* dense vector search *before* reranking could be beneficial.
+- **Agent Design:** The two-step agent (Plan -> Extract) is more robust than direct DSL generation for this task. However, the extraction step is sensitive to evidence quality and prompt details.
+- **Value Extraction:** Reliably extracting and scaling numerical values (millions, %, etc.) is non-trivial and a major source of errors. More sophisticated parsing or targeted extraction models might be needed.
+- **Chunking Strategy:** The current chunking (paragraphs, table rows) might not be optimal. Exploring different chunk sizes, overlap, or semantic chunking could improve retrieval quality.
+- **Experiment Tracking:** W&B was invaluable for rapidly iterating on prompts, models, and retrieval parameters.
+- **Trade-offs:** The project demonstrated the trade-offs between development speed, complexity (DSL vs. Python eval), performance, and the challenges inherent in open-domain financial QA within a limited timeframe.
+- **Transparency:** Documenting the journey, including abandoned approaches (Pinecone, DSL) and performance fluctuations, provides a realistic view of the iterative AI development process.
+
+---
+
+## Shortcomings of the Current RAG Pipeline
+
+Based on the development and evaluation conducted within the one-week timeframe, the current FinRAG pipeline exhibits several limitations:
+
+1.  **Global Retrieval Precision:** While the pipeline successfully retrieves generally relevant documents using global ChromaDB search + Cohere reranking, it often fails to pinpoint the *single specific chunk* (especially tables or graphs) containing the exact numerical data required for the agent's extraction step. This leads to `substitute_failed` errors even when relevant documents are found.
+2.  **Value Extraction Fragility:** The LLM-based value extraction step (Step 2) is prone to errors. It can struggle with accurately interpreting scaling units (millions, billions, %), hallucinating values not present in the evidence, or failing to find a value even if it exists in the retrieved chunks. This step is highly sensitive to prompt wording and the quality/clarity of the evidence provided.
+3.  **Lack of True Hybrid Search Fusion:** The retriever uses ChromaDB primarily and BM25 only as a fallback in specific (currently unused in the UI) scenarios. It does not fuse results from both sparse and dense retrieval methods before reranking, potentially missing out on the benefits of combining keyword and semantic relevance signals early on.
+4.  **Basic Chunking Strategy:** The current approach of chunking by paragraphs and table rows is relatively simple. More advanced strategies (e.g., smaller/overlapping chunks, recursive retrieval, proposition-based indexing) might improve the retriever's ability to isolate specific facts.
+5.  **Performance Ceiling:** Despite extensive tuning within the week, the peak accuracy achieved (~62.5% on the sample set) indicates significant room for improvement. Addressing the retrieval and extraction shortcomings would be necessary to push performance higher.
+6.  **Scalability Concerns (Indexing Time):** While ChromaDB enabled full dataset indexing locally, the ~8-hour indexing time highlights potential challenges for significantly larger datasets or scenarios requiring frequent updates without GPU acceleration.

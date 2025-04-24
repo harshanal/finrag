@@ -1,4 +1,3 @@
-
 # FinRAG – Streamlit UI Walkthrough
 
 This section provides a visual and functional overview of the FinRAG Streamlit demo application. The interface is designed for exploring financial question-answering with transparency into how the system retrieves context, generates reasoning programs, and produces final answers.
@@ -8,7 +7,7 @@ This section provides a visual and functional overview of the FinRAG Streamlit d
 ## Purpose of the Demo
 
 - Demonstrate a working LLM-driven QA system on financial reports
-- Make internal steps (retrieval, reranking, DSL generation, execution) transparent
+- Make internal steps (retrieval, reranking, , execution) transparent
 
 ---
 
@@ -16,68 +15,62 @@ This section provides a visual and functional overview of the FinRAG Streamlit d
 
 ### 1. Initial View – Landing Interface
 
-- **Title**: "FinRAG: Financial Reasoning Assistant"
-- **Subtitle**: Describes ConvFinQA dataset context
-- **Input Field**: Allows user to enter or select a financial question
-- **Page Selector / Global Search Toggle**
+- **Title**: FinRAG: Financial Reasoning Assistant
+- **Subtitle**: Ask a question to search across the indexed financial reports from the ConvFinQA dataset.
+- **Input Field**:  Ask a Question
 
-> 📷 _Example Screenshot: `landing_page.png`_
+![Landing Page](screenshots/landing_page.png)
 
 ---
 
 ### 2. Retrieval Stage
 
 - Shows:
-  - Top-k retrieved chunks before reranking (BM25 + Embeddings)
+  - Top-k retrieved chunks before reranking (Embeddings retrieval from Vectore DB)
   - Reranked chunks (via Cohere)
   - Document source and type (text/table/row)
+- Each chunk shows:
+  - Document ID
+  - Content type: `text`, `table`, or `row` 
+  - Position: `pre` or `post` followed by sequence number
+  - Relevance score: Floating point between 0-1 (e.g. `Score: 0.41`)
+  - Content preview: First ~500 characters of the actual text content
 
-> 📷 _Example Screenshot: `retrieval_chunks.png`_
+![Retrieved Evidence](screenshots/results_retrieval.png)
 
----
-
-### 3. Generated Program & Execution
-
-- Displays the generated DSL program (e.g., `add(30, 36)`)
-- Shows the final executed answer (e.g., `66`)
-- **Optional**: Comparison with gold answer and program if available
-
-> 📷 _Example Screenshot: `execution_and_result.png`_
+![Evidence Ranked](screenshots/evidence_ranked.png)
 
 ---
 
-### 4. Accuracy Indicators
+### 3. Agent Results Display
 
-- Visual status for:
-  - ✅ DSL program matched gold
-  - ✅ Execution result matches gold answer
-  - 🔁 Tool was used correctly
+- Displays the agent's final output after execution:
+  - **Final Answer**: The computed answer, displayed prominently (e.g., using `st.metric` or `st.success`/`st.error`).
+  - **Generated Program (Template)**: The Python expression template used for the calculation (e.g., `(VAL_1 - VAL_2) / VAL_2`).
+  - **Intermediate Values**: The specific plan (required items map) and the extracted numerical values (or null) used in the calculation, shown as JSON.
+  - **Raw Agent Result (Debug)**: The full raw output dictionary from the agent, available in a collapsed debug expander.
+
+![Agent Results](screenshots/agent_results.png)
+
 
 ---
 
 ## Interactive Flow
 
-1. User selects or types a question
-2. System retrieves and reranks relevant evidence
-3. LLM generates a DSL program
-4. Tool executor runs the program
-5. UI presents:
-   - Retrieved evidence
-   - Generated reasoning chain
-   - Final answer and gold comparison
-
-
-
-## 📁 Screenshots Folder
-
-All relevant screenshots are stored in `/docs/screenshots/` and referenced here.
-
-To add new screenshots:
-
-1. Run the Streamlit app
-2. Capture screen regions using your OS tools
-3. Save as `.png` in `/docs/screenshots/`
-4. Update image references in this markdown
+1. User types a question.
+2. User clicks "Retrieve Evidence (Global Search)".
+3. System retrieves and reranks relevant evidence from the entire database (ChromaDB + Cohere).
+4. UI displays retrieved evidence chunks.
+5. User clicks "Run Agent with Evidence".
+6. Agent performs two LLM steps:
+   a. Specify Expression: Generates the calculation plan (required items, expression template).
+   b. Extract Values: Extracts numbers for required items from the evidence.
+7. Agent executes the expression using the extracted values.
+8. UI presents the final results:
+   - Final Answer
+   - Generated Program Template
+   - Intermediate Values
+   - Raw Agent Result (Debug)
 
 ---
 
