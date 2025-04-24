@@ -4,13 +4,13 @@ This document provides an overview of the testing strategy implemented to ensure
 
 ---
 
-## ✅ Testing Strategy
+## Testing Strategy
 
 A modular and mock-driven testing approach is intended. Each functional unit of the FinRAG pipeline should be tested in isolation using synthetic inputs and stubbed dependencies (like external APIs or vector stores), minimizing external calls during testing.
 
 ---
 
-## 🧪 Test Files and Coverage (Reflecting Current Architecture)
+## Test Files and Coverage (Reflecting Current Architecture)
 
 | File                   | Intended Functionality Tested                                                                                         |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------|
@@ -22,7 +22,7 @@ A modular and mock-driven testing approach is intended. Each functional unit of 
 
 ---
 
-## 🧰 Mocks and Stubs Used (Intended)
+## Mocks and Stubs Used (Intended)
 
 - **Retrieval Tests** (`test_retriever.py`):
   - Mocked `chromadb.PersistentClient` and collection query results.
@@ -38,7 +38,7 @@ A modular and mock-driven testing approach is intended. Each functional unit of 
 
 ---
 
-## 🔍 Example Test Output (Illustrative of Current Files)
+## Example Test Output (Illustrative of Current Files)
 
 ```bash
 $ poetry run pytest -v
