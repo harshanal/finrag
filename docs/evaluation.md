@@ -24,7 +24,7 @@ This document presents a structured analysis of the FinRAG system's performance 
     - Tracking hyperparameters (LLM models used for agent steps, retrieval parameters like `top_k`).
     - Storing evaluation configuration and output artifacts (JSONL logs).
     - Visualizing performance trends to guide prompt engineering and architectural decisions.
-    - *Initial exploration involved Jupyter notebooks (`notebooks/`), but W&B integrated with `run_evaluation.py` became the primary method for systematic evaluation.*
+    - *Initial exploration involved Jupyter notebooks (`notebooks/`), but W&B integrated with `eval.py` became the primary method for systematic evaluation.*
 
     ![Weights & Biases Dashboard Example](screenshots/wandb_results.png)
 
