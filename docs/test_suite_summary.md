@@ -1,71 +1,55 @@
 # FinRAG – Test Suite Summary
 
-This document provides an overview of the testing strategy implemented to ensure the stability, reliability, and correctness of the FinRAG system. It focuses on core module coverage, use of mocks and stubs, and examples of expected test outputs.
+This document provides an overview of the testing strategy implemented to ensure the stability, reliability, and correctness of the FinRAG system. It focuses on core module coverage, the use of mocks and stubs, and the intended scope of the tests.
 
 ---
 
-## ✅ Testing Philosophy
+## ✅ Testing Strategy
 
-A modular and mock-driven testing approach is used. Each functional unit of the FinRAG pipeline is tested in isolation using synthetic inputs and stubbed dependencies, minimizing external API calls.
-
----
-
-## 🧪 Test Files and Coverage
-
-| File                   | Functionality Tested                                                                                       |
-|------------------------|------------------------------------------------------------------------------------------------------------|
-| `test_calculator.py`   | Arithmetic operations (`add`, `subtract`, `multiply`, `divide`), percentage formatting (`format_percentage`), and direct `execute_program` on `Operation` lists. |
-| `test_dsl.py`          | DSL parsing (`parse_program`), serialization (`serialize_program`), execution flow including percent formatting and error cases. |
-| `test_chunk_utils.py`  | Chunk builder (`build_candidate_chunks`) splitting conversation turns into pre-text, table rows, and post-text chunks. |
-| `test_retriever.py`    | Hybrid retrieval pipeline: vector search fallback, BM25 ranking, and dummy reranking.                     |
-| `test_agent.py`        | LLM tool-call generation (`generate_tool_call`) and fallback extraction logic for malformed JSON responses. |
-| `test_tools.py`        | Math tool integration: `run_math_tool` end-to-end processing of DSL programs.                                |
-| `test_eval.py`         | Evaluation pipeline logic: computation of execution accuracy and related metrics.                          |
+A modular and mock-driven testing approach is intended. Each functional unit of the FinRAG pipeline should be tested in isolation using synthetic inputs and stubbed dependencies (like external APIs or vector stores), minimizing external calls during testing.
 
 ---
 
-## 🧰 Mocks and Stubs Used
+## 🧪 Test Files and Coverage (Reflecting Current Architecture)
+
+| File                   | Intended Functionality Tested                                                                                         |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `test_chunk_utils.py`  | Chunk builder (`build_candidate_chunks`) splitting conversation turns into pre-text, table rows, and post-text chunks.    |
+| `test_retriever.py`    | Multi-stage retrieval pipeline: Mocked ChromaDB search, BM25 fallback logic (if applicable), and Cohere reranking simulation. |
+| `test_agent.py`        | Two-step agent logic: Mocked LLM calls for `specify_and_generate_expression` (planning) and `extract_all_values_with_llm` (extraction), orchestration (`plan_and_execute`), and safe `eval()` execution. |
+| `test_tools.py`        | (Minimal/Potentially Redundant) Basic tool initialisation or utility functions, if any remain outside agent/retriever logic. |
+| `test_eval.py`         | Evaluation pipeline logic: Computation of execution accuracy (`answers_match`) and related metrics based on evaluation logs. |
+
+---
+
+## 🧰 Mocks and Stubs Used (Intended)
 
 - **Retrieval Tests** (`test_retriever.py`):
-  - Dummy Pinecone index and vector responses.
-  - `DummyBM25` for BM25 ranking.
-  - Stubbed rerank function returning fixed order.
+  - Mocked `chromadb.PersistentClient` and collection query results.
+  - `DummyBM25` or similar logic for testing BM25 fallback path.
+  - Mocked `cohere.Client.rerank` responses.
 - **Agent Tests** (`test_agent.py`):
-  - Mocked LLM responses via predefined function call payloads.
-  - Regex fallback tested with simulated malformed content.
-- **Calculator & DSL Tests** (`test_calculator.py`, `test_dsl.py`):
-  - Pure unit tests without external dependencies.
-- **Tool Tests** (`test_tools.py`):
-  - Direct invocation of `run_math_tool`, using real calculator logic.
+  - Mocked `openai.ChatCompletion.create` responses for both planning (Step 1) and extraction (Step 2) LLM calls, returning structured JSON payloads.
+  - Testing of error handling for different failure modes (`specify_failed`, `extract_failed`, `eval_failed`).
+- **Chunk Utility Tests** (`test_chunk_utils.py`):
+  - Pure unit tests using sample input dictionaries.
 - **Evaluation Tests** (`test_eval.py`):
-  - Synthetic datasets to verify metric calculations.
+  - Synthetic datasets/log entries to verify metric calculations.
 
 ---
 
-## 🔍 Example Test Output
+## 🔍 Example Test Output (Illustrative of Current Files)
 
 ```bash
 $ poetry run pytest -v
 
-tests/test_calculator.py::test_add_subtract_multiply_divide PASSED
-tests/test_calculator.py::test_format_percentage PASSED
-tests/test_calculator.py::test_execute_program_simple PASSED
-tests/test_dsl.py::test_parse_and_serialize PASSED
-tests/test_dsl.py::test_execute_program PASSED
-tests/test_dsl.py::test_division_by_zero PASSED
-tests/test_dsl.py::test_invalid_ref PASSED
-tests/test_chunk_utils.py::test_build_candidate_chunks_empty PASSED
-tests/test_chunk_utils.py::test_build_candidate_chunks_all_fields PASSED
-tests/test_retriever.py::test_retrieve_evidence_rerank PASSED
-tests/test_agent.py::test_generate_tool_call_with_fallback PASSED
-tests/test_tools.py::test_run_math_tool PASSED
-tests/test_eval.py::test_exec_accuracy_computation PASSED
+tests/test_chunk_utils.py::... PASSED
+tests/test_retriever.py::... PASSED
+tests/test_agent.py::... PASSED
+tests/test_tools.py::... PASSED 
+tests/test_eval.py::... PASSED 
 
-=== 13 passed in 11.22s ===
+=== X passed in Y.ZZs === 
 ```
-
-> All tests pass, ensuring module-level reliability and regression safety.
-
 ---
 
-FinRAG’s test suite validates individual components—retrieval, DSL parsing, math execution, agent orchestration, and evaluation—providing confidence in maintainable AI solution development.

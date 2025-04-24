@@ -130,9 +130,9 @@ COMBINED_STEP_FUNCTION_NAME = "specify_extract_and_express"
 COMBINED_STEP_FUNCTION_SCHEMA = {
     "name": COMBINED_STEP_FUNCTION_NAME,
     "description": "Specifies calculation type, maps required items to placeholders, defines the python expression template, and sets the desired output format.",
-    "parameters": {
-        "type": "object",
-        "properties": {
+        "parameters": {
+            "type": "object",
+            "properties": {
             "calculation_type": {
                 "type": "string",
                 "description": "Type of calculation (e.g., 'percentage_change', 'sum', 'average', 'ratio', 'difference', 'value_lookup').",
@@ -285,16 +285,16 @@ Relevant Evidence:
         # Using default model (gpt-4o-mini unless overridden)
         model_name = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini") 
         logger.info(f"Using OpenAI model: {model_name} for combined specification and expression generation.")
-        response = openai.ChatCompletion.create(
+    response = openai.ChatCompletion.create(
             model=model_name,
-            messages=messages,
-            temperature=0,
+        messages=messages,
+        temperature=0,
             max_tokens=700, 
             functions=[COMBINED_STEP_FUNCTION_SCHEMA],
             function_call={"name": COMBINED_STEP_FUNCTION_NAME}
-        )
+    )
 
-        message = response.choices[0].message
+    message = response.choices[0].message
         if message.get("function_call"):
             func_call = message["function_call"]
             if func_call.get("name") == COMBINED_STEP_FUNCTION_NAME:
@@ -523,7 +523,7 @@ Relevant Evidence:
                 except json.JSONDecodeError:
                     logger.error(f"Failed to decode arguments JSON for multi-value extraction: {args_str}")
                     errors.extend([f"LLM returned invalid JSON for '{item}'" for item in required_items])
-            else:
+    else:
                 logger.error(f"LLM called wrong function for multi-value extraction: {func_call.get('name')}")
                 errors.extend([f"LLM called wrong function for '{item}'" for item in required_items])
         else:

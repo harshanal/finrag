@@ -1,114 +1,115 @@
-
 # FinRAG – System Design Document
 
-This document outlines the architectural design and system flow for FinRAG, an LLM-powered financial question-answering engine. It includes component descriptions, flow diagrams, and variants of the MVP pipeline.
+This document outlines the architectural design and system flow for FinRAG, an LLM-powered financial question-answering engine. It includes component descriptions, flow diagrams, and variants of the RAG pipeline.
 
 ---
 
-## 🎯 Design Objectives
+## Design Objectives
 
-- Modular components for retrieval, reasoning, and execution.
+- Modular components for retrieval, planning, extraction, and execution.
 - Clear abstraction between data, logic, and model behavior.
-- Multiple deployment variants to showcase flexibility.
+- Flexible architecture adaptable to different retrieval and agent strategies.
 
 ---
 
-## 🧩 System Components
+##  System Components
 
 ### 1. Input Interface
-- Accepts financial question (optionally conversational).
-- Selects or matches context from a financial document set.
+- Accepts a financial question.
+- Can operate in global search mode or potentially be adapted for sample-scoped search (though the default UI is global).
 
-### 2. Retriever
-- Hybrid retrieval:
-  - **BM25**: Classical keyword-based scoring.
-  - **Embeddings**: Semantic similarity (OpenAI, text-embedding-ada-002).
-  - **Fusion**: Combine top-k BM25 and semantic matches.
-- **Reranker**: Cohere ReRank to improve quality of final selected evidence.
+### 2. Retriever (`src/finrag/retriever.py`)
+- Performs multi-stage retrieval:
+  - **Primary Retrieval**: Dense vector search using **ChromaDB** based on question embeddings.
+  - **Fallback Retrieval**: If ChromaDB fails/returns empty (and if operating in a sample-scoped context with necessary data), uses **BM25Okapi** (keyword-based) on chunks from the specific context.
+  - **Reranker**: Uses **Cohere ReRank API** on the initial candidate chunks (from ChromaDB or BM25) to select the final top-k most relevant evidence chunks.
 
-### 3. Planner (LLM Agent)
-- LLM (OpenAI GPT-4 / O4-mini / Claude) receives:
-  - Current question
-  - Chat history (if available)
-  - Retrieved evidence
-- Outputs a DSL program (e.g., `subtract(100, 80), divide(#0, 80)`).
+### 3. Agent (`src/finrag/agent.py`)
+- Implements a two-step LLM process:
+  - **Step 1: Specify Expression (`specify_and_generate_expression`)**: 
+    - Receives the question and reranked evidence chunks.
+    - Calls an LLM (e.g., GPT-4o-mini) to determine required financial items, maps them to placeholders (VAL_1, VAL_2...), generates a Python expression template (e.g., `(VAL_1 - VAL_2) / VAL_2`), and determines output format.
+  - **Step 2: Extract Values (`extract_all_values_with_llm`)**: 
+    - Receives the required items map (from Step 1) and evidence chunks.
+    - Calls an LLM to extract the numerical values for each required item, applying scaling (millions, %, etc.) based on context within the evidence.
 
-### 4. Tool Executor
-- Parses and executes the DSL using a Python sandbox.
-- Applies numeric operations and formatting (e.g., `format_percentage`).
+### 4. Executor (within `plan_and_execute` in `src/finrag/agent.py`)
+- Substitutes the extracted numerical values (from Step 2) into the Python expression template (from Step 1).
+- Executes the resulting standard Python expression using a safe `eval()` context.
+- Formats the final numerical result based on the output format specified in Step 1 (e.g., formatting as a percentage).
 
 ### 5. Output Layer
-- Returns:
-  - Final answer
-  - Retrieved context
-  - Generated DSL program
-  - Comparison with gold answer (if available)
+- Returns a structured dictionary containing:
+  - Final formatted answer (or error message).
+  - The Python expression template used.
+  - Intermediate results (Step 1 plan, Step 2 extracted values, substituted expression).
+  - Tool used (`python_eval` or `none` on failure).
+  - IDs of the evidence chunks used by the agent.
 
 ---
 
-## 📊 Architecture Diagram
+## Architecture Diagram
 
 ```
-+-----------------------+     +--------------------+
-|    Question Input     | --> |     Retriever      |
-|  (UI or Evaluation)   |     |  (BM25 + Embedding)|
-+-----------------------+     +--------------------+
++-----------------------+      +-------------------------------------+      +------------------+
+|    Question Input     | ---> |      Retriever (ChromaDB Primary)   | ---> |     Reranker     |
+|      (Streamlit)      |      |      (Optional BM25 Fallback)       |      |   (Cohere API)   |
++-----------------------+      +-------------------------------------+      +------------------+
+                                                                                     |
+                                                                                     v
++------------------------------------+      +---------------------------------------------+
+| Agent - Step 1: Specify Expression | ---> | Agent - Step 2: Extract Values (with Scale) |
+|  (LLM: Required Items + Template)  |      |        (LLM: Finds Numbers in Evidence)     |
++------------------------------------+      +---------------------------------------------+
+               |                                                |                      
+               | (Template + Item Map)                          | (Extracted Numbers)  
+               +------------------------------------------------+                      
                                       |
-                                      v
-                             +------------------+
-                             |     Reranker     |
-                             |   (Cohere API)   |
-                             +------------------+
+                                      v                      
+                          +--------------------------+                     
+                          | Executor (Python eval()) |                     
+                          | Substitutes & Calculates |                     
+                          +--------------------------+                     
                                       |
-                                      v
-                            +---------------------+
-                            |   Planner (LLM)     |
-                            | Generates DSL Logic |
-                            +---------------------+
-                                      |
-                                      v
-                            +----------------------+
-                            |   DSL Executor       |
-                            | add, subtract, etc.  |
-                            +----------------------+
-                                      |
-                                      v
-                            +----------------------+
-                            |  Answer + Program +  |
-                            |     Retrieved Text   |
-                            +----------------------+
+                                      v                      
+                          +--------------------------+                     
+                          |   Final Answer + Details |
+                          |  (Formatted + Intermediates)|                     
+                          +--------------------------+                     
 ```
 
 ---
 
-## 🔁 MVP Variants
+## Pipeline Variants & Modes
 
-### MVP 1: Page-Based Retrieval (Default)
-- Uses a selected document or page as context.
-- Higher accuracy due to constrained retrieval.
+### Mode 1: Global Search (Current Streamlit Default)
+- The `retrieve_evidence` function is called with an empty `turn` dictionary.
+- ChromaDB performs a search across the entire indexed database based only on the question embedding.
+- BM25 fallback is effectively disabled as it requires `turn` data.
+- Suitable for general querying but may struggle to find highly specific data points without document context (as seen in UI testing).
 
-### MVP 2: Global Search
-- Freeform question selects across all indexed records.
-- Uses Cohere Rerank to improve retrieval.
-- Accuracy drops due to retrieval noise.
+### Mode 2: Sample-Scoped Search (Used in some Evaluations)
+- The `retrieve_evidence` function receives a `turn` dictionary containing sample details (like `filename`).
+- ChromaDB retrieval is filtered using the `doc_id` (filename) to search only within chunks from that specific source document.
+- If ChromaDB fails for that document, BM25 fallback *can* function using `build_candidate_chunks(turn)`.
+- Generally yields higher accuracy for dataset-specific questions due to the constrained search space.
 
-### MVP 3: Pinecone Vector Search
-- Replaces in-memory vector DB with Pinecone.
-- Enables scalable retrieval across thousands of records.
-- Accuracy limited by small data size and free-tier upload caps.
-
----
-
-## ⚙️ Engineering Notes
-
-- Retrieval and execution are decoupled from LLM, improving explainability.
-- Each module is testable in isolation.
-- Feature flags allow switching between modes (BM25, Pinecone, etc).
-- Prompt versioning enables fine-tuning over time.
+### Vector Store
+- Currently uses **ChromaDB** for persistent local vector storage (`./chroma_db_mpnet`).
+- Previous iterations used Pinecone, but ChromaDB is the active implementation.
 
 ---
 
-## 📌 Summary
+## Engineering Notes
 
-FinRAG’s architecture emphasises clean boundaries between retrieval, reasoning, and execution. It is flexible to support multiple strategies, scalable for larger datasets, and testable to maintain robust QA behavior.
+- Retrieval, planning/extraction, and execution are logically separated components.
+- The two-step agent allows for specialized prompts and potentially different models for planning vs. extraction (though currently uses the same model class by default).
+- Use of standard Python `eval()` simplifies execution compared to a custom DSL.
+- Relies on `python-dotenv` for managing API keys.
+
+---
+
+## Summary
+
+FinRAG's current architecture uses a multi-stage retrieval process (ChromaDB + Cohere Rerank) feeding into a two-step LLM agent (Specify Expression -> Extract Values) that culminates in the execution of a standard Python expression. It supports both global and potentially sample-scoped retrieval modes.
 

@@ -204,7 +204,7 @@ def main():
     # Ensure correct encoding is specified when opening
     try:
         with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        data = json.load(f)
     except Exception as e:
          # --- W&B: Log error and finish if file load fails ---
         error_msg = f"Failed to load or parse data file {data_path}: {e}"
@@ -223,16 +223,16 @@ def main():
 
     print(f"Starting evaluation with {len(data)} samples...")
     try:
-        report = evaluate_agent(data, use_retrieval=args.retrieval, strict=args.strict)
-        total = report["total"]
-        def pct(x: float) -> str:
-            return f"{x*100:.2f}%"
+    report = evaluate_agent(data, use_retrieval=args.retrieval, strict=args.strict)
+    total = report["total"]
+    def pct(x: float) -> str:
+        return f"{x*100:.2f}%"
 
         print(f"Total samples processed: {total}")
-        print(f"Execution Accuracy: {pct(report['execution_accuracy'])}")
-        print(f"Program Match Rate: {pct(report['program_match_rate'])}")
-        print(f"Tool Usage Rate: {pct(report['tool_usage_rate'])}")
-        print(f"Failures: {len(report['failures'])}")
+    print(f"Execution Accuracy: {pct(report['execution_accuracy'])}")
+    print(f"Program Match Rate: {pct(report['program_match_rate'])}")
+    print(f"Tool Usage Rate: {pct(report['tool_usage_rate'])}")
+    print(f"Failures: {len(report['failures'])}")
 
         # --- W&B: Log Metrics ---
         if run:
@@ -246,15 +246,15 @@ def main():
             })
         # --- End W&B Log Metrics ---
 
-        out_dir = "outputs"
-        os.makedirs(out_dir, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = "outputs"
+    os.makedirs(out_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file_name = f"eval_{args.split}{f'_sample{args.sample}' if args.sample else ''}_{ts}.jsonl"
         log_file_path = os.path.join(out_dir, log_file_name)
         with open(log_file_path, "w") as f:
-            for ex in report["examples"]:
-                f.write(json.dumps(ex))
-                f.write("\n")
+        for ex in report["examples"]:
+            f.write(json.dumps(ex))
+            f.write("\n")
         print(f"Full log: {log_file_path}")
 
         # --- W&B: Log Output File as Artifact ---
